@@ -4,9 +4,10 @@ Connect two distinct radio [Meshtastic](https://meshtastic.org) networks using T
 
 ## Requirements
 
-* Python3
-* `LOCAL_NODE_ADDR` The IP address or Serial devPath (micro USB cable needed for serial access) of a local Meshtastic device
-* `REMOTE_NODE_ARR` The IP address of a remote Meshtastic device
+- Python3
+- Two Meshtastic devices:   
+   - Local `LOCAL_NODE_ADDR` The IP address or Serial devPath (micro USB cable needed for serial access) of a local Meshtastic device
+   - Remote `REMOTE_NODE_ARR` The IP address of a remote Meshtastic device
 
 Refer to <https://meshtastic.org/docs/settings/config/wifi#wifi-client> to configure a Meshtastic device to use wifi and expose a TCP address
 
