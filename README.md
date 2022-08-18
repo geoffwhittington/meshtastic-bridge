@@ -25,7 +25,7 @@ $ pip install -r requirements.txt
 
 ## Turn on the Bridge
 
-In the `meshtastic-bridge` directory run the following:
+In the `meshtastic-bridge` directory run the following - replacing `BRIDGE_DISTANCE_KM`, `LOCAL_NODE_ADDR` and `REMOTE_NODE_ADDR` with the proper values:
 
 ```
 BRIDGE_DISTANCE_KM=0 LOCAL_NODE_ADDR=/dev/ttyUSB0 REMOTE_NODE_ADDR=182.168.86.123 python main.py
