@@ -2,6 +2,8 @@
 
 Connect two distinct radio [Meshtastic](https://meshtastic.org) networks using TCP.
 
+WARNING: Traffic is sent insecure using TCP. Use a VPN to secure traffic between the nodes
+
 ## Requirements
 
 - Python3
