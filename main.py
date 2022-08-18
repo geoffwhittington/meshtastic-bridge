@@ -12,12 +12,12 @@ from pubsub import pub
 local_interface = None
 remote_interface = None
 
-local_node_addr = os.environ['LOCAL_NODE_ADDR']
+local_node_addr = os.environ['LOCAL_NODE_ADDR'] if 'LOCAL_NODE_ADDR' in os.environ else None
 remote_node_addr = os.environ['REMOTE_NODE_ADDR']
 
-if '/' in local_node_addr:
+if local_node_addr and '/' in local_node_addr:
     local_interface = meshtastic.serial_interface.SerialInterface(devPath=local_node_addr)
-elif '.' in local_node_addr:
+elif local_node_addr and '.' in local_node_addr:
     local_interface = meshtastic.tcp_interface.TCPInterface(hostname=local_node_addr)
 else:
     local_interface = meshtastic.serial_interface.SerialInterface()
