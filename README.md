@@ -27,5 +27,9 @@ $ pip install -r requirements.txt
 In the `meshtastic-bridge` directory run the following:
 
 ```
-LOCAL_NODE_ADDR=/dev/ttyUSB0 REMOTE_NODE_ARR=182.168.86.123 python main.py
+BRIDGE_DISTANCE_KM=0 LOCAL_NODE_ADDR=/dev/ttyUSB0 REMOTE_NODE_ARR=182.168.86.123 python main.py
 ```
+
+## Runtime Options
+
+* `BRIDGE_DISTANCE_KM` Maximum distance from local Meshtastic device to relay messages. Default `0` (no limit)
