@@ -8,11 +8,11 @@ jobs:
     name: Build, push
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout master
+      - name: Checkout main
         uses: actions/checkout@main
 
       - name: Build container
-        run: docker build --tag gwhittington/meshtastic-bridge:latest
+        run: docker build --tag gwhittington/meshtastic-bridge:latest .
 
       - name: Log in to Container Registry with short-lived credentials
         run: docker login --username=gwhittington --password "${{secrets.DOCKER_HUB}}"
