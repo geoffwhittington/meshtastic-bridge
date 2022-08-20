@@ -1,2 +1,4 @@
 haversine
 meshtastic
+requests
+pyyaml

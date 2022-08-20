@@ -1,0 +1,24 @@
+on:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  build:
+    name: Build, push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@main
+
+      - name: Build container
+        run: docker build --tag gwhittington/meshtastic-bridge:latest
+
+      - name: Log in to Container Registry with short-lived credentials
+        run: docker login --username=gwhittington --password "${{secrets.DOCKER_HUB}}"
+
+      - name: Push image to Container Registry
+        run: docker push gwhittington/meshtastic-bridge:latest
+
+      - name: Logout from Container Registry
+        run: docker logout
