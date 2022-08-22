@@ -156,16 +156,19 @@ class WebhookPlugin(Plugin):
 
     def do_action(self, packet):
         if type(packet) is not dict:
-            self.logger.warning("Packet is not dict")
-            return packet
+            try:
+                packet = json.loads(packet)
+            except:
+                self.logger.warning("Packet is not dict")
+                return packet
 
         if "active" in self.config and not self.config["active"]:
             return packet
 
-        if "position" not in packet["decoded"]:
+        if 'body' not in self.config:
+            self.logger.warning("Missing config: body")
             return packet
 
-        import json
         import requests
 
         position = packet["decoded"]["position"] if "position" in packet["decoded"] else None
