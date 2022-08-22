@@ -25,7 +25,7 @@ def onReceive(packet, interface):  # called when a packet arrives
     for pipeline, pipeline_plugins in bridge_config["pipelines"].items():
         logger.debug(f"Pipeline {pipeline} initiated")
 
-        p = plugins['packet_filter']
+        p = plugins["packet_filter"]
         pipeline_packet = p.do_action(packet)
 
         for plugin in pipeline_plugins:
@@ -47,6 +47,7 @@ def onReceive(packet, interface):  # called when a packet arrives
 
         logger.debug(f"Pipeline {pipeline} completed")
 
+
 def onConnection(
     interface, topic=pub.AUTO_TOPIC
 ):  # called when we (re)connect to the radio
@@ -54,6 +55,7 @@ def onConnection(
     logger.info(
         f"Connected to node: userId={nodeInfo['user']['id']} hwModel={nodeInfo['user']['hwModel']}"
     )
+
 
 pub.subscribe(onReceive, "meshtastic.receive")
 pub.subscribe(onConnection, "meshtastic.connection.established")
@@ -65,7 +67,7 @@ devices = {}
 mqtt_servers = {}
 
 for device in bridge_config["devices"]:
-    if "active" in device and not device['active']:
+    if "active" in device and not device["active"]:
         continue
 
     if "serial" in device:
@@ -79,20 +81,20 @@ for device in bridge_config["devices"]:
     else:
         devices[device["name"]] = meshtastic.serial_interface.SerialInterface()
 
-for config in bridge_config['mqtt_servers']:
+for config in bridge_config["mqtt_servers"]:
     required_options = [
-        'name',
-        'server',
-        'port',
+        "name",
+        "server",
+        "port",
     ]
 
     for option in required_options:
         if option not in config:
             logger.warning("Missing config: {option}")
 
-    client_id = config['client_id'] if 'client_id' in config else None
-    username = config['username'] if 'username' in config else None
-    password = config['password'] if 'password' in config else None
+    client_id = config["client_id"] if "client_id" in config else None
+    username = config["username"] if "username" in config else None
+    password = config["password"] if "password" in config else None
 
     if client_id:
         mqttc = mqtt.Client(client_id)
@@ -102,20 +104,21 @@ for config in bridge_config['mqtt_servers']:
     if username and password:
         mqttc.username_pw_set(username, password)
 
-    mqtt_servers[config['name']] = mqttc
+    mqtt_servers[config["name"]] = mqttc
 
     def on_connect(mqttc, obj, flags, rc):
         logger.debug(f"Connected to MQTT {config['name']}")
+
     def on_message(mqttc, obj, msg):
         packet = msg.payload.decode()
 
         logger.debug(f"MQTT {config['name']}: on_message")
 
-        if 'pipelines' not in config:
+        if "pipelines" not in config:
             logger.warning(f"MQTT {config['name']}: no pipeline")
             return
 
-        for pipeline, pipeline_plugins in config['pipelines'].items():
+        for pipeline, pipeline_plugins in config["pipelines"].items():
 
             logger.debug(f"MQTT {config['name']} pipeline {pipeline} started")
             if not packet:
@@ -138,6 +141,7 @@ for config in bridge_config['mqtt_servers']:
 
     def on_publish(mqttc, obj, mid):
         logger.debug(f"MQTT {config['name']}: on_publish: {mid}")
+
     def on_subscribe(mqttc, obj, mid, granted_qos):
         logger.debug(f"MQTT {config['name']}: on_subscribe: {mid}")
 
@@ -148,14 +152,14 @@ for config in bridge_config['mqtt_servers']:
 
     import ssl
 
-    if 'insecure' in config and config['insecure']:
+    if "insecure" in config and config["insecure"]:
         mqttc.tls_set(cert_reqs=ssl.CERT_NONE)
         mqttc.tls_insecure_set(True)
 
-    mqttc.connect(config['server'], config['port'], 60)
+    mqttc.connect(config["server"], config["port"], 60)
 
-    if 'topic' in config:
-        mqttc.subscribe(config['topic'], 0)
+    if "topic" in config:
+        mqttc.subscribe(config["topic"], 0)
 
     mqttc.loop_start()
 

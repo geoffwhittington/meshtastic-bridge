@@ -33,8 +33,8 @@ class PacketFilter(Plugin):
         if type(dict_obj) is not dict:
             return dict_obj
 
-        if 'raw' in dict_obj:
-            del dict_obj['raw']
+        if "raw" in dict_obj:
+            del dict_obj["raw"]
 
         for k, v in dict_obj.items():
             dict_obj[k] = self.strip_raw(v)
@@ -44,12 +44,16 @@ class PacketFilter(Plugin):
     def do_action(self, packet):
         packet = self.strip_raw(packet)
 
-        if 'decoded' in packet and 'payload' in packet['decoded']:
-            packet['decoded']['payload'] = base64.b64encode(packet['decoded']['payload']).decode('utf-8')
+        if "decoded" in packet and "payload" in packet["decoded"]:
+            packet["decoded"]["payload"] = base64.b64encode(
+                packet["decoded"]["payload"]
+            ).decode("utf-8")
 
         return packet
 
-plugins['packet_filter'] = PacketFilter()
+
+plugins["packet_filter"] = PacketFilter()
+
 
 class DebugFilter(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.plugin.logging")
@@ -106,7 +110,7 @@ class DistanceFilter(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.filter.distance")
 
     def do_action(self, packet):
-        if 'device' not in self.config:
+        if "device" not in self.config:
             return packet
 
         if "position" not in packet["decoded"]:
@@ -165,13 +169,15 @@ class WebhookPlugin(Plugin):
         if "active" in self.config and not self.config["active"]:
             return packet
 
-        if 'body' not in self.config:
+        if "body" not in self.config:
             self.logger.warning("Missing config: body")
             return packet
 
         import requests
 
-        position = packet["decoded"]["position"] if "position" in packet["decoded"] else None
+        position = (
+            packet["decoded"]["position"] if "position" in packet["decoded"] else None
+        )
         text = packet["decoded"]["text"] if "text" in packet["decoded"] else None
 
         macros = {
@@ -216,29 +222,30 @@ class MQTTPlugin(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.plugin.mqtt")
 
     def do_action(self, packet):
-        required_options = ['name', 'topic']
+        required_options = ["name", "topic"]
 
         for option in required_options:
             if option not in self.config:
                 self.logger.warning(f"Missing config: {option}")
                 return packet
 
-        if self.config['name'] not in self.mqtt_servers:
+        if self.config["name"] not in self.mqtt_servers:
             self.logger.warning(f"No server established: {self.config['name']}")
             return packet
 
-        mqtt_server = self.mqtt_servers[self.config['name']]
+        mqtt_server = self.mqtt_servers[self.config["name"]]
 
         packet_payload = packet if type(packet) is str else json.dumps(packet)
 
-        message = self.config['message'] if 'message' in self.config else packet_payload
+        message = self.config["message"] if "message" in self.config else packet_payload
 
-        info = mqtt_server.publish(self.config['topic'], message)
+        info = mqtt_server.publish(self.config["topic"], message)
         info.wait_for_publish()
 
         self.logger.debug("Message sent")
 
-plugins['mqtt_plugin'] = MQTTPlugin()
+
+plugins["mqtt_plugin"] = MQTTPlugin()
 
 
 class EncryptFilter(Plugin):
@@ -246,13 +253,13 @@ class EncryptFilter(Plugin):
 
     def do_action(self, packet):
 
-        if 'key' not in self.config:
+        if "key" not in self.config:
             return None
 
         from jwcrypto import jwk, jwe
         from jwcrypto.common import json_encode, json_decode
 
-        with open(self.config['key'], "rb") as pemfile:
+        with open(self.config["key"], "rb") as pemfile:
             encrypt_key = jwk.JWK.from_pem(pemfile.read())
 
         public_key = jwk.JWK()
@@ -266,21 +273,22 @@ class EncryptFilter(Plugin):
 
         message = json.dumps(packet)
 
-        jwetoken = jwe.JWE(message.encode('utf-8'),
-                               recipient=public_key,
-                               protected=protected_header)
+        jwetoken = jwe.JWE(
+            message.encode("utf-8"), recipient=public_key, protected=protected_header
+        )
 
         self.logger.debug(f"Encrypted message: {packet['id']}")
         return jwetoken.serialize()
 
-plugins['encrypt_filter'] = EncryptFilter()
+
+plugins["encrypt_filter"] = EncryptFilter()
 
 
 class DecryptFilter(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.filter.decrypt")
 
     def do_action(self, packet):
-        if 'key' not in self.config:
+        if "key" not in self.config:
             return packet
 
         if type(packet) is not str:
@@ -289,7 +297,7 @@ class DecryptFilter(Plugin):
 
         from jwcrypto import jwk, jwe
 
-        with open(self.config['key'], "rb") as pemfile:
+        with open(self.config["key"], "rb") as pemfile:
             private_key = jwk.JWK.from_pem(pemfile.read())
 
         jwetoken = jwe.JWE()
@@ -299,7 +307,8 @@ class DecryptFilter(Plugin):
         self.logger.debug(f"Decrypted message: {packet['id']}")
         return packet
 
-plugins['decrypt_filter'] = DecryptFilter()
+
+plugins["decrypt_filter"] = DecryptFilter()
 
 
 class SendPlugin(Plugin):
@@ -337,6 +346,11 @@ class SendPlugin(Plugin):
             destinationId = self.config["toId"]
 
         device_name = self.config["device"]
+
+        if device_name not in self.devices:
+            self.logger.warning(f"No such radio device: {device_name}")
+            return packet
+
         device = self.devices[device_name]
 
         self.logger.debug(f"Sending packet to Radio {device_name}")
