@@ -336,7 +336,7 @@ class SendPlugin(Plugin):
         device_name = self.config["device"]
         device = self.devices[device_name]
 
-        self.logger.debug(f"Sending packet to {device_name}")
+        self.logger.debug(f"Sending packet to Radio {device_name}")
 
         if "message" in self.config and self.config["message"]:
             device.sendText(text=self.config["message"], destinationId=destinationId)

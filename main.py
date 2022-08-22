@@ -105,14 +105,14 @@ for config in bridge_config['mqtt_servers']:
     mqtt_servers[config['name']] = mqttc
 
     def on_connect(mqttc, obj, flags, rc):
-        logger.debug(f"Connected to MQTT server: {config['name']}")
+        logger.debug(f"Connected to MQTT {config['name']}")
     def on_message(mqttc, obj, msg):
         packet = msg.payload.decode()
 
         logger.debug(f"MQTT {config['name']}: on_message")
 
         if 'pipelines' not in config:
-            logger.warning(f"MQTT ({config['name']}): no pipeline")
+            logger.warning(f"MQTT {config['name']}: no pipeline")
             return
 
         for pipeline, pipeline_plugins in config['pipelines'].items():
@@ -137,9 +137,9 @@ for config in bridge_config['mqtt_servers']:
             logger.debug(f"MQTT {config['name']} pipeline {pipeline} finished")
 
     def on_publish(mqttc, obj, mid):
-        logger.debug(f"MQTT ({config['name']}) on_publish: {mid}")
+        logger.debug(f"MQTT {config['name']}: on_publish: {mid}")
     def on_subscribe(mqttc, obj, mid, granted_qos):
-        logger.debug(f"MQTT ({config['name']}) on_subscribe: {mid}")
+        logger.debug(f"MQTT {config['name']}: on_subscribe: {mid}")
 
     mqttc.on_message = on_message
     mqttc.on_connect = on_connect
