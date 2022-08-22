@@ -305,8 +305,11 @@ class SendPlugin(Plugin):
     def do_action(self, packet):
 
         if type(packet) is not dict:
-            self.logger.error(f"Packet is not dict")
-            return packet
+            try:
+                packet = json.loads(packet)
+            except:
+                self.logger.error("Packet is not a dict")
+                return packet
 
         if self.config["device"] not in self.devices:
             self.logger.error(f"Missing interface for device {self.config['device']}")
