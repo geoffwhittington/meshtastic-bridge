@@ -155,6 +155,10 @@ class WebhookPlugin(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.plugin.webhook")
 
     def do_action(self, packet):
+        if type(packet) is not dict:
+            self.logger.warning("Packet is not dict")
+            return packet
+
         if "active" in self.config and not self.config["active"]:
             return packet
 
@@ -276,6 +280,10 @@ class DecryptFilter(Plugin):
         if 'key' not in self.config:
             return packet
 
+        if type(packet) is not str:
+            self.logger.warning(f"Packet is not string")
+            return packet
+
         from jwcrypto import jwk, jwe
 
         with open(self.config['key'], "rb") as pemfile:
@@ -295,6 +303,10 @@ class SendPlugin(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.plugin.send")
 
     def do_action(self, packet):
+
+        if type(packet) is not dict:
+            self.logger.error(f"Packet is not dict")
+            return packet
 
         if self.config["device"] not in self.devices:
             self.logger.error(f"Missing interface for device {self.config['device']}")
