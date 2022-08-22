@@ -2,3 +2,5 @@ haversine
 meshtastic
 requests
 pyyaml
+paho-mqtt
+jwcrypto

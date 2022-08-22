@@ -1,18 +1,22 @@
 from haversine import haversine
 from meshtastic import mesh_pb2
 from meshtastic.__init__ import BROADCAST_ADDR
+import base64
+import json
 import logging
 import os
+
 
 plugins = {}
 
 
 class Plugin:
-    def configure(self, devices, config):
+    def configure(self, devices, mqtt_servers, config):
         self.config = config
         self.devices = devices
+        self.mqtt_servers = mqtt_servers
 
-        if "log_level" in config:
+        if config and "log_level" in config:
             if config["log_level"] == "debug":
                 self.logger.setLevel(logging.DEBUG)
             elif config["log_level"] == "info":
@@ -22,13 +26,35 @@ class Plugin:
         pass
 
 
+class PacketFilter(Plugin):
+    logger = logging.getLogger(name="meshtastic.bridge.filter.packet")
+
+    def strip_raw(self, dict_obj):
+        if type(dict_obj) is not dict:
+            return dict_obj
+
+        if 'raw' in dict_obj:
+            del dict_obj['raw']
+
+        for k, v in dict_obj.items():
+            dict_obj[k] = self.strip_raw(v)
+
+        return dict_obj
+
+    def do_action(self, packet):
+        packet = self.strip_raw(packet)
+
+        if 'decoded' in packet and 'payload' in packet['decoded']:
+            packet['decoded']['payload'] = base64.b64encode(packet['decoded']['payload']).decode('utf-8')
+
+        return packet
+
+plugins['packet_filter'] = PacketFilter()
+
 class DebugFilter(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.plugin.logging")
 
     def do_action(self, packet):
-        self.logger.info(
-            f"{packet['id']} | {packet['fromId']}=>{packet['toId']} | {packet['decoded']['portnum']}"
-        )
         self.logger.debug(packet)
         return packet
 
@@ -138,10 +164,13 @@ class WebhookPlugin(Plugin):
         import json
         import requests
 
+        position = packet["decoded"]["position"] if "position" in packet["decoded"] else None
+        text = packet["decoded"]["text"] if "text" in packet["decoded"] else None
+
         macros = {
-            "{LAT}": packet["decoded"]["position"]["latitude"],
-            "{LNG}": packet["decoded"]["position"]["longitude"],
-            "{MSG}": self.config["message"] if "message" in self.config else "",
+            "{LAT}": position["latitude"] if position else None,
+            "{LNG}": position["longitude"] if position else None,
+            "{MSG}": self.config["message"] if "message" in self.config else text,
             "{FID}": packet["fromId"],
             "{TID}": packet["toId"],
         }
@@ -176,6 +205,92 @@ class WebhookPlugin(Plugin):
 plugins["webhook"] = WebhookPlugin()
 
 
+class MQTTPlugin(Plugin):
+    logger = logging.getLogger(name="meshtastic.bridge.plugin.mqtt")
+
+    def do_action(self, packet):
+        required_options = ['name', 'topic']
+
+        for option in required_options:
+            if option not in self.config:
+                self.logger.warning(f"Missing config: {option}")
+                return packet
+
+        if self.config['name'] not in self.mqtt_servers:
+            self.logger.warning(f"No server established: {self.config['name']}")
+            return packet
+
+        mqtt_server = self.mqtt_servers[self.config['name']]
+
+        packet_payload = packet if type(packet) is str else json.dumps(packet)
+
+        message = self.config['message'] if 'message' in self.config else packet_payload
+
+        info = mqtt_server.publish(self.config['topic'], message)
+        info.wait_for_publish()
+
+        self.logger.debug("Message sent")
+
+plugins['mqtt_plugin'] = MQTTPlugin()
+
+
+class EncryptFilter(Plugin):
+    logger = logging.getLogger(name="meshtastic.bridge.filter.encrypt")
+
+    def do_action(self, packet):
+
+        if 'key' not in self.config:
+            return None
+
+        from jwcrypto import jwk, jwe
+        from jwcrypto.common import json_encode, json_decode
+
+        with open(self.config['key'], "rb") as pemfile:
+            encrypt_key = jwk.JWK.from_pem(pemfile.read())
+
+        public_key = jwk.JWK()
+        public_key.import_key(**json_decode(encrypt_key.export_public()))
+        protected_header = {
+            "alg": "RSA-OAEP-256",
+            "enc": "A256CBC-HS512",
+            "typ": "JWE",
+            "kid": public_key.thumbprint(),
+        }
+
+        message = json.dumps(packet)
+
+        jwetoken = jwe.JWE(message.encode('utf-8'),
+                               recipient=public_key,
+                               protected=protected_header)
+
+        self.logger.debug(f"Encrypted message: {packet['id']}")
+        return jwetoken.serialize()
+
+plugins['encrypt_filter'] = EncryptFilter()
+
+
+class DecryptFilter(Plugin):
+    logger = logging.getLogger(name="meshtastic.bridge.filter.decrypt")
+
+    def do_action(self, packet):
+        if 'key' not in self.config:
+            return packet
+
+        from jwcrypto import jwk, jwe
+
+        with open(self.config['key'], "rb") as pemfile:
+            private_key = jwk.JWK.from_pem(pemfile.read())
+
+        jwetoken = jwe.JWE()
+        jwetoken.deserialize(packet, key=private_key)
+        payload = jwetoken.payload
+        packet = json.loads(payload)
+        self.logger.debug(f"Decrypted message: {packet['id']}")
+        return packet
+
+plugins['decrypt_filter'] = DecryptFilter()
+
+
 class SendPlugin(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.plugin.send")
 
@@ -185,7 +300,7 @@ class SendPlugin(Plugin):
             self.logger.error(f"Missing interface for device {self.config['device']}")
             return packet
 
-        if "to" not in packet:
+        if "to" not in packet and "toId" not in packet:
             self.logger.debug("Not a message")
             return packet
 
@@ -196,10 +311,12 @@ class SendPlugin(Plugin):
         ):
             destinationId = self.config["node_mapping"][packet["to"]]
         else:
-            destinationId = packet["to"]
+            destinationId = packet["to"] if "to" in packet else packet["toId"]
 
         if "to" in self.config:
             destinationId = self.config["to"]
+        elif "toId" in self.config:
+            destinationId = self.config["toId"]
 
         device_name = self.config["device"]
         device = self.devices[device_name]
@@ -227,14 +344,11 @@ class SendPlugin(Plugin):
         else:
             meshPacket = mesh_pb2.MeshPacket()
             meshPacket.channel = 0
-            meshPacket.decoded.payload = packet["decoded"]["payload"]
+            meshPacket.decoded.payload = base64.b64decode(packet["decoded"]["payload"])
             meshPacket.decoded.portnum = packet["decoded"]["portnum"]
             meshPacket.decoded.want_response = False
             meshPacket.id = device._generatePacketId()
 
-            self.logger.debug(
-                f"Sending packet {meshPacket.id} to {self.config['device']}"
-            )
             device._sendPacket(meshPacket=meshPacket, destinationId=destinationId)
 
         return packet
