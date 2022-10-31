@@ -1,5 +1,6 @@
 import json
 import logging
+from re import I
 import meshtastic
 import meshtastic.serial_interface
 import meshtastic.tcp_interface
@@ -20,7 +21,15 @@ logger = logging.getLogger(name="meshtastic.bridge")
 logger.setLevel(logging.DEBUG)
 
 
+class CustomTCPInterface(meshtastic.tcp_interface.TCPInterface):
+    def __init__(self, hostname, device_name):
+        self.device_name = device_name
+        self.hostname = hostname
+        super(CustomTCPInterface, self).__init__(hostname)
+
+
 def onReceive(packet, interface):  # called when a packet arrives
+    nodeInfo = interface.getMyNodeInfo()
 
     for pipeline, pipeline_plugins in bridge_config["pipelines"].items():
         logger.debug(f"Pipeline {pipeline} initiated")
@@ -29,6 +38,9 @@ def onReceive(packet, interface):  # called when a packet arrives
         pipeline_packet = p.do_action(packet)
 
         for plugin in pipeline_plugins:
+            if not pipeline_packet:
+                continue
+
             for plugin_key, plugin_config in plugin.items():
 
                 logger.debug(f"Processing plugin: {pipeline}/{plugin_key}")
@@ -57,8 +69,17 @@ def onConnection(
     )
 
 
+def onLost(interface):
+    logger.debug(f"Connecting to {interface.hostname} ...")
+    devices[interface.device_name] = CustomTCPInterface(
+        hostname=interface.hostname, device_name=interface.device_name
+    )
+    logger.debug(f"Connected to {interface.hostname}")
+
+
 pub.subscribe(onReceive, "meshtastic.receive")
 pub.subscribe(onConnection, "meshtastic.connection.established")
+pub.subscribe(onLost, "meshtastic.connection.lost")
 
 with open("config.yaml") as f:
     bridge_config = yaml.load(f, Loader=SafeLoader)
@@ -75,99 +96,109 @@ for device in bridge_config["devices"]:
             devPath=device["serial"]
         )
     elif "tcp" in device:
-        devices[device["name"]] = meshtastic.tcp_interface.TCPInterface(
-            hostname=device["tcp"]
+        logger.debug(f"Connecting to {device['tcp']} ...")
+        devices[device["name"]] = CustomTCPInterface(
+            hostname=device["tcp"], device_name=device["name"]
         )
+        logger.debug(f"Connected to {device['tcp']}")
     else:
         devices[device["name"]] = meshtastic.serial_interface.SerialInterface()
 
-for config in bridge_config["mqtt_servers"]:
-    required_options = [
-        "name",
-        "server",
-        "port",
-    ]
+if "mqtt_servers" in bridge_config:
+    for config in bridge_config["mqtt_servers"]:
+        required_options = [
+            "name",
+            "server",
+            "port",
+        ]
 
-    for option in required_options:
-        if option not in config:
-            logger.warning("Missing config: {option}")
+        for option in required_options:
+            if option not in config:
+                logger.warning("Missing config: {option}")
 
-    client_id = config["client_id"] if "client_id" in config else None
-    username = config["username"] if "username" in config else None
-    password = config["password"] if "password" in config else None
+        client_id = config["client_id"] if "client_id" in config else None
+        username = config["username"] if "username" in config else None
+        password = config["password"] if "password" in config else None
 
-    if client_id:
-        mqttc = mqtt.Client(client_id)
-    else:
-        mqttc = mqtt.Client()
+        if client_id:
+            mqttc = mqtt.Client(client_id)
+        else:
+            mqttc = mqtt.Client()
 
-    if username and password:
-        mqttc.username_pw_set(username, password)
+        if username and password:
+            mqttc.username_pw_set(username, password)
 
-    mqtt_servers[config["name"]] = mqttc
+        mqtt_servers[config["name"]] = mqttc
 
-    def on_connect(mqttc, obj, flags, rc):
-        logger.debug(f"Connected to MQTT {config['name']}")
+        def on_connect(mqttc, obj, flags, rc):
+            logger.debug(f"Connected to MQTT {config['name']}")
 
-    def on_message(mqttc, obj, msg):
-        packet = msg.payload.decode()
+        def on_message(mqttc, obj, msg):
+            orig_packet = msg.payload.decode()
 
-        logger.debug(f"MQTT {config['name']}: on_message")
+            logger.debug(f"MQTT {config['name']}: on_message")
 
-        if "pipelines" not in config:
-            logger.warning(f"MQTT {config['name']}: no pipeline")
-            return
+            if "pipelines" not in config:
+                logger.warning(f"MQTT {config['name']}: no pipeline")
+                return
 
-        for pipeline, pipeline_plugins in config["pipelines"].items():
+            for pipeline, pipeline_plugins in config["pipelines"].items():
 
-            logger.debug(f"MQTT {config['name']} pipeline {pipeline} started")
-            if not packet:
-                continue
+                packet = orig_packet
 
-            for plugin in pipeline_plugins:
-                for plugin_key, plugin_config in plugin.items():
-                    if plugin_key not in plugins:
-                        logger.error(f"No such plugin: {plugin_key}. Skipping")
+                logger.debug(f"MQTT {config['name']} pipeline {pipeline} started")
+                if not packet:
+                    continue
+
+                for plugin in pipeline_plugins:
+                    if not packet:
                         continue
 
-                    p = plugins[plugin_key]
-                    p.configure(devices, mqtt_servers, plugin_config)
+                    for plugin_key, plugin_config in plugin.items():
+                        if plugin_key not in plugins:
+                            logger.error(f"No such plugin: {plugin_key}. Skipping")
+                            continue
 
-                    try:
-                        packet = p.do_action(packet)
-                    except Exception as e:
-                        logger.error(f"Hit an error: {e}", exc_info=True)
-            logger.debug(f"MQTT {config['name']} pipeline {pipeline} finished")
+                        p = plugins[plugin_key]
+                        p.configure(devices, mqtt_servers, plugin_config)
 
-    def on_publish(mqttc, obj, mid):
-        logger.debug(f"MQTT {config['name']}: on_publish: {mid}")
+                        try:
+                            packet = p.do_action(packet)
+                        except Exception as e:
+                            logger.error(f"Hit an error: {e}", exc_info=True)
+                logger.debug(f"MQTT {config['name']} pipeline {pipeline} finished")
 
-    def on_subscribe(mqttc, obj, mid, granted_qos):
-        logger.debug(f"MQTT {config['name']}: on_subscribe: {mid}")
+        def on_publish(mqttc, obj, mid):
+            logger.debug(f"MQTT {config['name']}: on_publish: {mid}")
 
-    mqttc.on_message = on_message
-    mqttc.on_connect = on_connect
-    mqttc.on_publish = on_publish
-    mqttc.on_subscribe = on_subscribe
+        def on_subscribe(mqttc, obj, mid, granted_qos):
+            logger.debug(f"MQTT {config['name']}: on_subscribe: {mid}")
 
-    import ssl
+        mqttc.on_message = on_message
+        mqttc.on_connect = on_connect
+        mqttc.on_publish = on_publish
+        mqttc.on_subscribe = on_subscribe
 
-    if "insecure" in config and config["insecure"]:
-        mqttc.tls_set(cert_reqs=ssl.CERT_NONE)
-        mqttc.tls_insecure_set(True)
+        import ssl
 
-    mqttc.connect(config["server"], config["port"], 60)
+        if "insecure" in config and config["insecure"]:
+            mqttc.tls_set(cert_reqs=ssl.CERT_NONE)
+            mqttc.tls_insecure_set(True)
 
-    if "topic" in config:
-        mqttc.subscribe(config["topic"], 0)
+        mqttc.connect(config["server"], config["port"], 60)
 
-    mqttc.loop_start()
+        if "topic" in config:
+            mqttc.subscribe(config["topic"], 0)
+
+        mqttc.loop_start()
 
 while True:
     time.sleep(1000)
 
-for device, instance in devices.items():
-    instance.close()
+if devices:
+    for device, instance in devices.items():
+        instance.close()
 
-for server, instance in mqtt_servers.items():
-    instance.disconnect()
+if mqtt_servers:
+    for server, instance in mqtt_servers.items():
+        instance.disconnect()

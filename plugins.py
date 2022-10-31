@@ -1,10 +1,11 @@
 from haversine import haversine
 from meshtastic import mesh_pb2
-from meshtastic.__init__ import BROADCAST_ADDR
+from random import randrange
 import base64
 import json
 import logging
 import os
+import re
 
 
 plugins = {}
@@ -74,6 +75,31 @@ class MessageFilter(Plugin):
             self.logger.error("Missing packet")
             return packet
 
+        text = packet["decoded"]["text"] if "text" in packet["decoded"] else None
+
+        if text and "message" in self.config:
+            if "allow" in self.config["message"]:
+                matches = False
+                for allow_regex in self.config["message"]["allow"]:
+                    if not matches and re.search(allow_regex, text):
+                        matches = True
+
+                if not matches:
+                    self.logger.debug(
+                        f"Dropped because it doesn't match message allow filter"
+                    )
+                    return None
+
+        if text and "disallow" in self.config["message"]:
+            matches = False
+            for disallow_regex in self.config["message"]["disallow"]:
+                if not matches and re.search(disallow_regex, text):
+                    matches = True
+
+            if matches:
+                self.logger.debug(f"Dropped because it matches message disallow filter")
+                return None
+
         filters = {
             "app": packet["decoded"]["portnum"],
             "from": packet["fromId"],
@@ -83,12 +109,15 @@ class MessageFilter(Plugin):
         for filter_key, value in filters.items():
             if filter_key in self.config:
                 filter_val = self.config[filter_key]
+
                 if (
                     "allow" in filter_val
                     and filter_val["allow"]
                     and value not in filter_val["allow"]
                 ):
-                    self.logger.debug(f"Dropped because it doesn't match allow filter")
+                    self.logger.debug(
+                        f"Dropped because it doesn't match {filter_key} allow filter"
+                    )
                     return None
 
                 if (
@@ -96,7 +125,9 @@ class MessageFilter(Plugin):
                     and filter_val["disallow"]
                     and value in filter_val["disallow"]
                 ):
-                    self.logger.debug(f"Dropped because it matches disallow filter")
+                    self.logger.debug(
+                        f"Dropped because it matches {filter_key} disallow filter"
+                    )
                     return None
 
         self.logger.debug(f"Accepted")
@@ -106,21 +137,24 @@ class MessageFilter(Plugin):
 plugins["message_filter"] = MessageFilter()
 
 
-class DistanceFilter(Plugin):
+class LocationFilter(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.filter.distance")
 
     def do_action(self, packet):
-        if "device" not in self.config:
-            return packet
-
-        if "position" not in packet["decoded"]:
-            return packet
-
         message_source_position = None
         current_local_position = None
 
+        if "device" in self.config and self.config["device"] in self.devices:
+            nodeInfo = self.devices[self.config["device"]].getMyNodeInfo()
+            current_local_position = (
+                nodeInfo["position"]["latitude"],
+                nodeInfo["position"]["longitude"],
+            )
+
         if (
-            "latitude" in packet["decoded"]["position"]
+            "decoded" in packet
+            and "position" in packet["decoded"]
+            and "latitude" in packet["decoded"]["position"]
             and "longitude" in packet["decoded"]["position"]
         ):
             message_source_position = (
@@ -128,31 +162,43 @@ class DistanceFilter(Plugin):
                 packet["decoded"]["position"]["longitude"],
             )
 
-            nodeInfo = self.devices[self.config["device"]].getMyNodeInfo()
+        if "compare_latitude" in self.config and "compare_longitude" in self.config:
             current_local_position = (
-                nodeInfo["position"]["latitude"],
-                nodeInfo["position"]["longitude"],
+                self.config["compare_latitude"],
+                self.config["compare_longitude"],
             )
 
         if message_source_position and current_local_position:
-
             distance_km = haversine(message_source_position, current_local_position)
 
+            comparison = (
+                self.config["comparison"] if "comparison" in self.config else "within"
+            )
+
             # message originates from too far a distance
-            if (
-                "max_distance_km" in self.config
-                and self.config["max_distance_km"] > 0
-                and distance_km > self.config["max_distance_km"]
-            ):
-                logger.debug(
-                    f"Packet from too far: {distance_km} > {SUPPORTED_BRIDGE_DISTANCE_KM}"
-                )
-                return None
+            if "max_distance_km" in self.config and self.config["max_distance_km"] > 0:
+                acceptable_distance = self.config["max_distance_km"]
+
+                if comparison == "within" and distance_km > acceptable_distance:
+                    self.logger.debug(
+                        f"Packet from too far: {distance_km} > {acceptable_distance}"
+                    )
+                    return None
+                elif comparison == "outside" and distance_km < acceptable_distance:
+                    self.logger.debug(
+                        f"Packet too close: {distance_km} < {acceptable_distance}"
+                    )
+                    return None
+
+        if "latitude" in self.config:
+            packet["decoded"]["position"]["latitude"] = self.config["latitude"]
+        if "longitude" in self.config:
+            packet["decoded"]["position"]["longitude"] = self.config["longitude"]
 
         return packet
 
 
-plugins["distance_filter"] = DistanceFilter()
+plugins["location_filter"] = LocationFilter()
 
 
 class WebhookPlugin(Plugin):
@@ -311,7 +357,7 @@ class DecryptFilter(Plugin):
 plugins["decrypt_filter"] = DecryptFilter()
 
 
-class SendPlugin(Plugin):
+class RadioMessagePlugin(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.plugin.send")
 
     def do_action(self, packet):
@@ -386,4 +432,4 @@ class SendPlugin(Plugin):
         return packet
 
 
-plugins["send_plugin"] = SendPlugin()
+plugins["radio_message_plugin"] = RadioMessagePlugin()

@@ -105,7 +105,7 @@ The following plugins can be used in the `pipelines` section of `config.yaml`:
 | ----------------- | -------------------------------------------------------------------- |
 | `debugger`        | Log the packet to the system console                                 |
 | `message_filter`  | Filters out packets from the bridge that match a specific criteria   |
-| `distance_filter` | Filters out packets that originate too far from a specified `device` |
+| `location_filter` | Filters out packets that originate too far from a specified `device` |
 | `webhook`         | Send HTTP requests with custom payloads using packet information     |
 | `mqtt_plugin`     | Send packets to a MQTT server                                        |
 | `encrypt_filter`  | Encrypt a packet for a desired MQTT recipient                        |
@@ -131,28 +131,37 @@ Useful for troubleshooting.
 - **app** Name of meshtastic application to allow or disallow
 - **from** The packet `fromId` values to allow or disallow
 - **to** The packet `toId` values to allow or disallow
+- **message** The packet `message` values to allow or disallow. Supports Regex.
 
 For example:
 
 ```
 message_filter:
-  app:
+  from:
      allow:
         - !bd5ba0ec
         - !f85bc0bc
      disallow:
         - !c15ba2ec
+  message:
+     disallow:
+        - Good night
 ```
 
-### distance_filter - Allow or block packets based on distance from origin to radio
+### location_filter - Filter packets by location from current node (default) or specific location
 
 - **log_level** `debug` or `info`. Default `info`
-- **max_distance_km** Number of kilometers
+- **max_distance_km** Filter packets more than a certain distance
+- **comparison** `within` or `outside`. Default `within`
+- **compare_latitude** Set the latitude to compare against
+- **compare_longitude** Set the longitude to compare against
+- **latitude** Set the latitude
+- **longitude** Set the longitude
 
-For example:
+For example
 
 ```
-distance_filter:
+location_filter:
   max_distance_km: 1000
 ```
 
@@ -225,7 +234,7 @@ decrypt_filter:
   key: '/home/user/keys/key.pem'
 ```
 
-### send_plugin - Send a packet to a radio
+### radio_message_plugin - Send a packet to a radio
 
 - **log_level** `debug` or `info`. Default `info`
 - **active** Plugin is active. Values: `true` or `false`. Default `true`.
@@ -242,7 +251,7 @@ For example:
 Broadcasts all packets to the "remote" radio network that are destined to the node `12354345`.
 
 ```
-send_plugin:
+radio_message_plugin:
   device: remote
   node_mapping:
     12354345: ^all
