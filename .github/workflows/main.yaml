@@ -14,6 +14,6 @@ jobs:
         uses: zmingxie/docker_buildx@master
         with:
           publish: true
-          imageName: gwhittington/meshtastic-bridge:latest
+          imageName: gwhittington/meshtastic-bridge
           dockerHubUser: gwhittington
           dockerHubPassword: ${{secrets.DOCKER_HUB}}
