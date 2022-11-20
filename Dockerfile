@@ -7,7 +7,7 @@ WORKDIR /code
 # copy the dependencies file to the working directory
 COPY requirements.txt .
 
-RUN apt-get update && apt-get install -y cargo openssl-devel
+RUN apt-get update && apt-get install -y cargo
 
 # install dependencies
 RUN pip install -U pip
