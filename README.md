@@ -66,7 +66,7 @@ mqtt_servers:
        mqtt-to-radio:
          - decrypt_filter:
             key: '/home/user/keys/key.pem'
-         - send_plugin:
+         - radio_message_plugin:
             device: remote
 pipelines:
  radio-to-mqtt:
@@ -110,7 +110,7 @@ The following plugins can be used in the `pipelines` section of `config.yaml`:
 | `mqtt_plugin`     | Send packets to a MQTT server                                        |
 | `encrypt_filter`  | Encrypt a packet for a desired MQTT recipient                        |
 | `decrypt_filter`  | Decrypt a packet originating from MQTT                               |
-| `send_plugin`     | Send a packet to a specified `device`                                |
+| `radio_message_plugin`     | Send a packet to a specified `device`                       |
 
 ### debugger - Output the contents of a packet
 
@@ -153,8 +153,8 @@ message_filter:
 - **log_level** `debug` or `info`. Default `info`
 - **max_distance_km** Filter packets more than a certain distance
 - **comparison** `within` or `outside`. Default `within`
-- **compare_latitude** Set the latitude to compare against
-- **compare_longitude** Set the longitude to compare against
+- **compare_latitude** latitude to compare against
+- **compare_longitude** longitude to compare against
 - **latitude** Set the latitude
 - **longitude** Set the longitude
 
