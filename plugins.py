@@ -423,7 +423,7 @@ class RadioMessagePlugin(Plugin):
             meshPacket = mesh_pb2.MeshPacket()
             meshPacket.channel = 0
             meshPacket.decoded.payload = base64.b64decode(packet["decoded"]["payload"])
-            meshPacket.decoded.portnum = packet["decoded"]["portnum"]
+            meshPacket.decoded.portnum = int(packet["decoded"]["portnum"])
             meshPacket.decoded.want_response = False
             meshPacket.id = device._generatePacketId()
 
