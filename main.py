@@ -120,6 +120,8 @@ if "mqtt_servers" in bridge_config:
         username = config["username"] if "username" in config else None
         password = config["password"] if "password" in config else None
 
+        logger.info(f"Connected to MQTT {config['name']}")
+
         if client_id:
             mqttc = mqtt.Client(client_id)
         else:
@@ -128,8 +130,6 @@ if "mqtt_servers" in bridge_config:
         if username and password:
             mqttc.username_pw_set(username, password)
 
-        mqtt_servers[config["name"]] = mqttc
-
         def on_connect(mqttc, obj, flags, rc):
             logger.debug(f"Connected to MQTT {config['name']}")
 
@@ -137,16 +137,20 @@ if "mqtt_servers" in bridge_config:
             orig_packet = msg.payload.decode()
 
             logger.debug(f"MQTT {config['name']}: on_message")
+            logger.debug(f"MQTT {config['name']}: {orig_packet}")
 
             if "pipelines" not in config:
                 logger.warning(f"MQTT {config['name']}: no pipeline")
                 return
 
+            p = plugins["packet_filter"]
+            pipeline_packet = p.do_action(orig_packet)
+
             for pipeline, pipeline_plugins in config["pipelines"].items():
 
-                packet = orig_packet
+                packet = pipeline_packet
 
-                logger.debug(f"MQTT {config['name']} pipeline {pipeline} started")
+                logger.debug(f"MQTT {config['name']} pipeline {pipeline} initiated")
                 if not packet:
                     continue
 
@@ -179,18 +183,26 @@ if "mqtt_servers" in bridge_config:
         mqttc.on_publish = on_publish
         mqttc.on_subscribe = on_subscribe
 
+        mqtt_servers[config["name"]] = mqttc
+
         import ssl
 
         if "insecure" in config and config["insecure"]:
             mqttc.tls_set(cert_reqs=ssl.CERT_NONE)
             mqttc.tls_insecure_set(True)
 
-        mqttc.connect(config["server"], config["port"], 60)
+        try:
+            logger.debug(f"Connecting to MQTT {config['server']}")
 
-        if "topic" in config:
-            mqttc.subscribe(config["topic"], 0)
+            mqttc.connect(config["server"], config["port"], 60)
 
-        mqttc.loop_start()
+            if "topic" in config:
+                mqttc.subscribe(config["topic"], 0)
+
+            mqttc.loop_start()
+        except Exception as e:
+            logger.error(f"MQTT {config['name']} could not start: {e}")
+            pass
 
 while True:
     time.sleep(1000)

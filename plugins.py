@@ -11,7 +11,10 @@ import re
 plugins = {}
 
 
-class Plugin:
+class Plugin(object):
+    def __init__(self) -> None:
+        self.logger.setLevel(logging.INFO)
+
     def configure(self, devices, mqtt_servers, config):
         self.config = config
         self.devices = devices
@@ -30,25 +33,42 @@ class Plugin:
 class PacketFilter(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.filter.packet")
 
-    def strip_raw(self, dict_obj):
+    def strip_raw(self, data):
+        if type(data) is not dict:
+            return data
+
+        if "raw" in data:
+            del data["raw"]
+
+        for k, v in data.items():
+            data[k] = self.strip_raw(v)
+
+        return data
+
+    def normalize(self, dict_obj):
+        """
+        Packets are either a dict, string dict or string
+        """
         if type(dict_obj) is not dict:
-            return dict_obj
+            try:
+                dict_obj = json.loads(dict_obj)
+            except:
+                dict_obj = {"decoded": {"text": dict_obj}}
 
-        if "raw" in dict_obj:
-            del dict_obj["raw"]
-
-        for k, v in dict_obj.items():
-            dict_obj[k] = self.strip_raw(v)
-
-        return dict_obj
+        return self.strip_raw(dict_obj)
 
     def do_action(self, packet):
-        packet = self.strip_raw(packet)
+        self.logger.debug(f"Before normalization: {packet}")
+        packet = self.normalize(packet)
 
         if "decoded" in packet and "payload" in packet["decoded"]:
-            packet["decoded"]["payload"] = base64.b64encode(
-                packet["decoded"]["payload"]
-            ).decode("utf-8")
+            if type(packet["decoded"]["payload"]) is bytes:
+                text = packet["decoded"]["payload"]
+                packet["decoded"]["payload"] = base64.b64encode(
+                    packet["decoded"]["payload"]
+                ).decode("utf-8")
+
+        self.logger.debug(f"After normalization: {packet}")
 
         return packet
 
@@ -90,15 +110,17 @@ class MessageFilter(Plugin):
                     )
                     return None
 
-        if text and "disallow" in self.config["message"]:
-            matches = False
-            for disallow_regex in self.config["message"]["disallow"]:
-                if not matches and re.search(disallow_regex, text):
-                    matches = True
+            if "disallow" in self.config["message"]:
+                matches = False
+                for disallow_regex in self.config["message"]["disallow"]:
+                    if not matches and re.search(disallow_regex, text):
+                        matches = True
 
-            if matches:
-                self.logger.debug(f"Dropped because it matches message disallow filter")
-                return None
+                if matches:
+                    self.logger.debug(
+                        f"Dropped because it matches message disallow filter"
+                    )
+                    return None
 
         filters = {
             "app": packet["decoded"]["portnum"],
@@ -116,7 +138,7 @@ class MessageFilter(Plugin):
                     and value not in filter_val["allow"]
                 ):
                     self.logger.debug(
-                        f"Dropped because it doesn't match {filter_key} allow filter"
+                        f"Dropped because {value} doesn't match {filter_key} allow filter"
                     )
                     return None
 
@@ -126,7 +148,7 @@ class MessageFilter(Plugin):
                     and value in filter_val["disallow"]
                 ):
                     self.logger.debug(
-                        f"Dropped because it matches {filter_key} disallow filter"
+                        f"Dropped because {value} matches {filter_key} disallow filter"
                     )
                     return None
 
@@ -205,13 +227,6 @@ class WebhookPlugin(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.plugin.webhook")
 
     def do_action(self, packet):
-        if type(packet) is not dict:
-            try:
-                packet = json.loads(packet)
-            except:
-                self.logger.warning("Packet is not dict")
-                return packet
-
         if "active" in self.config and not self.config["active"]:
             return packet
 
@@ -281,9 +296,16 @@ class MQTTPlugin(Plugin):
 
         mqtt_server = self.mqtt_servers[self.config["name"]]
 
-        packet_payload = packet if type(packet) is str else json.dumps(packet)
+        if not mqtt_server.is_connected():
+            self.logger.error("Not sent, not connected")
+            return
 
-        message = self.config["message"] if "message" in self.config else packet_payload
+        packet_message = json.dumps(packet)
+
+        if "message" in self.config:
+            message = self.config["message"].replace("{MSG}", packet["decoded"]["text"])
+        else:
+            message = packet_message
 
         info = mqtt_server.publish(self.config["topic"], message)
         info.wait_for_publish()
@@ -361,48 +383,36 @@ class RadioMessagePlugin(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.plugin.send")
 
     def do_action(self, packet):
-
-        if type(packet) is not dict:
-            try:
-                packet = json.loads(packet)
-            except:
-                self.logger.error("Packet is not a dict")
-                return packet
-
         if self.config["device"] not in self.devices:
             self.logger.error(f"Missing interface for device {self.config['device']}")
             return packet
 
-        if "to" not in packet and "toId" not in packet:
-            self.logger.debug("Not a message")
-            return packet
-
-        # Broadcast messages or specific
-        if (
-            "node_mapping" in self.config
-            and packet["to"] in self.config["node_mapping"]
-        ):
-            destinationId = self.config["node_mapping"][packet["to"]]
-        else:
-            destinationId = packet["to"] if "to" in packet else packet["toId"]
+        destinationId = None
 
         if "to" in self.config:
             destinationId = self.config["to"]
         elif "toId" in self.config:
             destinationId = self.config["toId"]
+        elif "node_mapping" in self.config and "to" in packet:
+            destinationId = self.config["node_mapping"][packet["to"]]
+        elif "to" in packet:
+            destinationId = packet["to"]
+        elif "toId" in packet:
+            destinationId = packet["toId"]
+
+        if not destinationId:
+            self.logger.error("Missing 'to' property in config or packet")
+            return packet
 
         device_name = self.config["device"]
 
-        if device_name not in self.devices:
-            self.logger.warning(f"No such radio device: {device_name}")
-            return packet
-
         device = self.devices[device_name]
 
-        self.logger.debug(f"Sending packet to Radio {device_name}")
+        # Not a radio packet
+        if "decoded" in packet and "text" in packet["decoded"] and "from" not in packet:
+            self.logger.debug(f"Sending text to Radio {device_name}")
+            device.sendText(text=packet["decoded"]["text"], destinationId=destinationId)
 
-        if "message" in self.config and self.config["message"]:
-            device.sendText(text=self.config["message"], destinationId=destinationId)
         elif (
             "lat" in self.config
             and self.config["lat"] > 0
@@ -413,19 +423,27 @@ class RadioMessagePlugin(Plugin):
             lng = self.config["lng"]
             altitude = self.config["alt"] if "alt" in self.config else 0
 
+            self.logger.debug(f"Sending position to Radio {device_name}")
+
             device.sendPosition(
                 latitude=lat,
                 longitude=lng,
                 altitude=altitude,
                 destinationId=destinationId,
             )
-        else:
+        elif (
+            "decoded" in packet
+            and "payload" in packet["decoded"]
+            and "portnum" in packet["decoded"]
+        ):
             meshPacket = mesh_pb2.MeshPacket()
             meshPacket.channel = 0
             meshPacket.decoded.payload = base64.b64decode(packet["decoded"]["payload"])
-            meshPacket.decoded.portnum = int(packet["decoded"]["portnum"])
+            meshPacket.decoded.portnum = packet["decoded"]["portnum"]
             meshPacket.decoded.want_response = False
             meshPacket.id = device._generatePacketId()
+
+            self.logger.debug(f"Sending packet to Radio {device_name}")
 
             device._sendPacket(meshPacket=meshPacket, destinationId=destinationId)
 
