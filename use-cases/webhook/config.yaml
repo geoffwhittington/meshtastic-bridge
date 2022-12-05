@@ -1,0 +1,18 @@
+devices:
+  - name: radio1
+    tcp: meshtastic.local
+pipelines:
+  pipeline1:
+    - debugger:
+        log_level: debug
+  radio-to-webhook:
+    - message_filter:
+        app:
+          allow:
+            - "TEXT_MESSAGE_APP"
+    - webhook:
+        active: true
+        body: '{"lat": "{LAT}", "lng": "{LNG}", "text_message": "{MSG}"}'
+        url: "https://webhook.site/452ea027-f9f1-4a62-827b-c921715fcdfb"
+        headers:
+          Content-type: application/json
