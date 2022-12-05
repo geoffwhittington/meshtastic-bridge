@@ -199,7 +199,7 @@ webhook:
 - **log_level** `debug` or `info`. Default `info`
 - **active** Plugin is active. Values: `true` or `false`. Default = `true`.
 - **name** Reference of an existing MQTT server configured in the top-level `mqtt_servers` configuration
-- **message** Override the packet message with a custom value
+- **message** Override the packet message with a custom value.
 - **topic** The message topic
 
 For example:
@@ -209,6 +209,10 @@ mqtt_plugin:
   name: external
   topic: meshtastic/topic
 ```
+
+Placeholders can be used with the **message** value:
+
+- `{MSG}` - Packet text
 
 ### encrypt_filter - Encrypt a packet before sending it to a MQTT server
 
@@ -286,3 +290,4 @@ docker run --rm --network host -v $(pwd)/config.yaml:/code/config.yaml gwhitting
 ## Resources
 
 - Example guidance for creating [PEM](https://www.suse.com/support/kb/doc/?id=000018152) key files.
+- Test webhooks using [Webhooks.site](https://webhook.site/)

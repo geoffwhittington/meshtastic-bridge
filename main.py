@@ -136,7 +136,6 @@ if "mqtt_servers" in bridge_config:
         def on_message(mqttc, obj, msg):
             orig_packet = msg.payload.decode()
 
-            logger.debug(f"MQTT {config['name']}: on_message")
             logger.debug(f"MQTT {config['name']}: {orig_packet}")
 
             if "pipelines" not in config:

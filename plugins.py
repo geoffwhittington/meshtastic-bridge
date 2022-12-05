@@ -242,8 +242,8 @@ class WebhookPlugin(Plugin):
         text = packet["decoded"]["text"] if "text" in packet["decoded"] else None
 
         macros = {
-            "{LAT}": position["latitude"] if position else None,
-            "{LNG}": position["longitude"] if position else None,
+            "{LAT}": position["latitude"] if position else "",
+            "{LNG}": position["longitude"] if position else "",
             "{MSG}": self.config["message"] if "message" in self.config else text,
             "{FID}": packet["fromId"],
             "{TID}": packet["toId"],
@@ -311,6 +311,8 @@ class MQTTPlugin(Plugin):
         info.wait_for_publish()
 
         self.logger.debug("Message sent")
+
+        return packet
 
 
 plugins["mqtt_plugin"] = MQTTPlugin()
