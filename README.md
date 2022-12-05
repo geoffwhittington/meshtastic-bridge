@@ -101,16 +101,16 @@ NOTE: If `tcp` or `serial` are not given the bridge will attempt to detect a rad
 
 The following plugins can be used in the `pipelines` section of `config.yaml`:
 
-| Plugin            | Description                                                          |
-| ----------------- | -------------------------------------------------------------------- |
-| `debugger`        | Log the packet to the system console                                 |
-| `message_filter`  | Filters out packets from the bridge that match a specific criteria   |
-| `location_filter` | Filters out packets that originate too far from a specified `device` |
-| `webhook`         | Send HTTP requests with custom payloads using packet information     |
-| `mqtt_plugin`     | Send packets to a MQTT server                                        |
-| `encrypt_filter`  | Encrypt a packet for a desired MQTT recipient                        |
-| `decrypt_filter`  | Decrypt a packet originating from MQTT                               |
-| `radio_message_plugin`     | Send a packet to a specified `device`                       |
+| Plugin                 | Description                                                          |
+| ---------------------- | -------------------------------------------------------------------- |
+| `debugger`             | Log the packet to the system console                                 |
+| `message_filter`       | Filters out packets from the bridge that match a specific criteria   |
+| `location_filter`      | Filters out packets that originate too far from a specified `device` |
+| `webhook`              | Send HTTP requests with custom payloads using packet information     |
+| `mqtt_plugin`          | Send packets to a MQTT server                                        |
+| `encrypt_filter`       | Encrypt a packet for a desired MQTT recipient                        |
+| `decrypt_filter`       | Decrypt a packet originating from MQTT                               |
+| `radio_message_plugin` | Send a packet to a specified `device`                                |
 
 ### debugger - Output the contents of a packet
 
@@ -277,8 +277,10 @@ python main.py
 
 Create a `config.yaml` with the desired settings and run the following Docker command:
 
+#### Linux
+
 ```
-docker run -v $(pwd)/config.yaml:/code/config.yaml gwhittington/meshtastic-bridge:latest
+docker run --rm --network host -v $(pwd)/config.yaml:/code/config.yaml gwhittington/meshtastic-bridge:latest
 ```
 
 ## Resources
