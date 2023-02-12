@@ -42,7 +42,6 @@ def onReceive(packet, interface):  # called when a packet arrives
                 continue
 
             for plugin_key, plugin_config in plugin.items():
-
                 logger.debug(f"Processing plugin: {pipeline}/{plugin_key}")
                 if not pipeline_packet:
                     logger.debug("Skipping since the packet is null")
@@ -146,7 +145,6 @@ if "mqtt_servers" in bridge_config:
             pipeline_packet = p.do_action(orig_packet)
 
             for pipeline, pipeline_plugins in config["pipelines"].items():
-
                 packet = pipeline_packet
 
                 logger.debug(f"MQTT {config['name']} pipeline {pipeline} initiated")

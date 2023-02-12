@@ -111,6 +111,7 @@ The following plugins can be used in the `pipelines` section of `config.yaml`:
 | `encrypt_filter`       | Encrypt a packet for a desired MQTT recipient                        |
 | `decrypt_filter`       | Decrypt a packet originating from MQTT                               |
 | `radio_message_plugin` | Send a packet to a specified `device`                                |
+| `nostr_plugin`         | Send a NoStr event to a relay                                        |
 
 ### debugger - Output the contents of a packet
 
@@ -237,6 +238,28 @@ For example:
 decrypt_filter:
   key: '/home/user/keys/key.pem'
 ```
+
+### nostr_plugin - Send a NoStr event
+
+- **log_level** `debug` or `info`. Default `info`
+- **private_key** The private key for a NoStr user. Secrets can be passed using ENV variables
+- **public_key** The public key for the NoStr user associated with the private key.
+- **message** A specific message
+- **relays** List of NoStr relays
+
+For example:
+
+```
+nostr_plugin:
+  private_key: "{NOSTR_PRIVATE_KEY}"
+  public_key: "npub1d0ja5d.......xw7jys4eqnk0"
+  relays:
+    - "wss://nostr-pub.wellorder.net"
+```
+
+Placeholders can be used with the **message** value:
+
+- `{MSG}` - Packet text
 
 ### radio_message_plugin - Send a packet to a radio
 

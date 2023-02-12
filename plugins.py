@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import re
-
+import ssl
 
 plugins = {}
 
@@ -322,7 +322,6 @@ class EncryptFilter(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.filter.encrypt")
 
     def do_action(self, packet):
-
         if "key" not in self.config:
             return None
 
@@ -453,3 +452,75 @@ class RadioMessagePlugin(Plugin):
 
 
 plugins["radio_message_plugin"] = RadioMessagePlugin()
+
+
+import time
+from nostr.event import Event
+from nostr.relay_manager import RelayManager
+from nostr.message_type import ClientMessageType
+from nostr.key import PrivateKey, PublicKey
+
+
+class NoStrPlugin(Plugin):
+    logger = logging.getLogger(name="meshtastic.bridge.plugin.nostr_send")
+
+    def do_action(self, packet):
+        relays = ["wss://nostr-pub.wellorder.net", "wss://relay.damus.io"]
+
+        for config_value in ["private_key", "public_key"]:
+            if config_value not in self.config:
+                self.logger.debug(f"Missing {config_value}")
+                return packet
+
+        # configure relays
+        if "relays" in self.config:
+            for relay in self.config["relays"]:
+                relays.append(relay)
+
+        relay_manager = RelayManager()
+
+        for relay in relays:
+            relay_manager.add_relay(relay)
+
+        self.logger.debug(f"Opening connection to NoStr relays...")
+
+        relay_manager.open_connections(
+            {"cert_reqs": ssl.CERT_NONE}
+        )  # NOTE: This disables ssl certificate verification
+        time.sleep(
+            self.config["startup_wait"] if "startup_wait" in self.config else 1.25
+        )  # allow the connections to open
+
+        # Opportunistically use environment variable
+        for ek, ev in os.environ.items():
+            needle = "{" + ek + "}"
+            if needle in self.config["private_key"]:
+                self.config["private_key"] = self.config["private_key"].replace(
+                    needle, ev
+                )
+
+        private_key = PrivateKey.from_nsec(self.config["private_key"])
+        public_key = PublicKey.from_npub(self.config["public_key"])
+
+        if "message" in self.config:
+            message = self.config["message"].replace("{MSG}", packet["decoded"]["text"])
+        else:
+            message = packet["decoded"]["text"]
+
+        event = Event(content=message, public_key=public_key.hex())
+        private_key.sign_event(event)
+
+        self.logger.debug(f"Sending message to NoStr ...")
+        relay_manager.publish_event(event)
+        self.logger.info(f"Sent message to NoStr")
+
+        time.sleep(
+            self.config["publish_wait"] if "publish_wait" in self.config else 1
+        )  # allow the messages to send
+
+        relay_manager.close_connections()
+
+        return packet
+
+
+plugins["nostr_plugin"] = NoStrPlugin()
