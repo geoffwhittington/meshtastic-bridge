@@ -244,8 +244,8 @@ decrypt_filter:
 - **log_level** `debug` or `info`. Default `info`
 - **private_key** The private key for a NoStr user. Secrets can be passed using ENV variables
 - **public_key** The public key for the NoStr user associated with the private key.
-- **message** A specific message
-- **relays** List of NoStr relays
+- **message** A specific message (Optional)
+- **relays** List of NoStr relays. Default `wss://nostr-pub.wellorder.net`, and `wss://relay.damus.io`
 
 For example:
 
