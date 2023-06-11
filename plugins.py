@@ -391,7 +391,7 @@ class OwntracksPlugin(Plugin):
         self.logger.debug("Sending owntracks message")
 
         info = mqtt_server.publish("owntracks/user/" + tid_table[from_str][0], json.dumps(message))
-        info.wait_for_publish()
+        #info.wait_for_publish()
 
         self.logger.debug("Message sent")
 
