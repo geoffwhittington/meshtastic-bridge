@@ -112,6 +112,7 @@ The following plugins can be used in the `pipelines` section of `config.yaml`:
 | `decrypt_filter`       | Decrypt a packet originating from MQTT                               |
 | `radio_message_plugin` | Send a packet to a specified `device`                                |
 | `nostr_plugin`         | Send a NoStr event to a relay                                        |
+| `owntracks_plugin`     | Send location data to MQTT server for Owntracks                      |
 
 ### debugger - Output the contents of a packet
 
@@ -255,6 +256,27 @@ nostr_plugin:
   public_key: "npub1d0ja5d.......xw7jys4eqnk0"
   relays:
     - "wss://nostr-pub.wellorder.net"
+```
+
+Placeholders can be used with the **message** value:
+
+- `{MSG}` - Packet text
+
+### owntracks_plugin - Send location data to MQTT server for Owntracks
+
+- **log_level** `debug` or `info`. Default `info`
+- **server_name** The mqtt server to send owntracks messages to
+- **tid_table** Table of the numeric from IDs of each node, mapped to an Owntracks name and TID
+
+
+For example:
+
+```
+owntracks_plugin:
+  server_name: external
+  tid_table:
+    "1234": ["Van", "GV"]
+    "-5678": ["Home", "HR"]
 ```
 
 Placeholders can be used with the **message** value:
