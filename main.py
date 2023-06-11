@@ -86,22 +86,23 @@ with open("config.yaml") as f:
 devices = {}
 mqtt_servers = {}
 
-for device in bridge_config["devices"]:
-    if "active" in device and not device["active"]:
-        continue
+if "devices" in bridge_config:
+    for device in bridge_config["devices"]:
+        if "active" in device and not device["active"]:
+            continue
 
-    if "serial" in device:
-        devices[device["name"]] = meshtastic.serial_interface.SerialInterface(
-            devPath=device["serial"]
-        )
-    elif "tcp" in device:
-        logger.debug(f"Connecting to {device['tcp']} ...")
-        devices[device["name"]] = CustomTCPInterface(
-            hostname=device["tcp"], device_name=device["name"]
-        )
-        logger.debug(f"Connected to {device['tcp']}")
-    else:
-        devices[device["name"]] = meshtastic.serial_interface.SerialInterface()
+        if "serial" in device:
+            devices[device["name"]] = meshtastic.serial_interface.SerialInterface(
+                devPath=device["serial"]
+            )
+        elif "tcp" in device:
+            logger.debug(f"Connecting to {device['tcp']} ...")
+            devices[device["name"]] = CustomTCPInterface(
+                hostname=device["tcp"], device_name=device["name"]
+            )
+            logger.debug(f"Connected to {device['tcp']}")
+        else:
+            devices[device["name"]] = meshtastic.serial_interface.SerialInterface()
 
 if "mqtt_servers" in bridge_config:
     for config in bridge_config["mqtt_servers"]:
