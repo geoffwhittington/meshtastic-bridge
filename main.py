@@ -31,32 +31,33 @@ class CustomTCPInterface(meshtastic.tcp_interface.TCPInterface):
 def onReceive(packet, interface):  # called when a packet arrives
     nodeInfo = interface.getMyNodeInfo()
 
-    for pipeline, pipeline_plugins in bridge_config["pipelines"].items():
-        logger.debug(f"Pipeline {pipeline} initiated")
+    if "pipelines" in bridge_config:
+        for pipeline, pipeline_plugins in bridge_config["pipelines"].items():
+            logger.debug(f"Pipeline {pipeline} initiated")
 
-        p = plugins["packet_filter"]
-        pipeline_packet = p.do_action(packet)
+            p = plugins["packet_filter"]
+            pipeline_packet = p.do_action(packet)
 
-        for plugin in pipeline_plugins:
-            if not pipeline_packet:
-                continue
-
-            for plugin_key, plugin_config in plugin.items():
-                logger.debug(f"Processing plugin: {pipeline}/{plugin_key}")
+            for plugin in pipeline_plugins:
                 if not pipeline_packet:
-                    logger.debug("Skipping since the packet is null")
                     continue
 
-                if plugin_key not in plugins:
-                    logger.error(f"No such plugin: {plugin_key}. Skipping")
-                    continue
+                for plugin_key, plugin_config in plugin.items():
+                    logger.debug(f"Processing plugin: {pipeline}/{plugin_key}")
+                    if not pipeline_packet:
+                        logger.debug("Skipping since the packet is null")
+                        continue
 
-                p = plugins[plugin_key]
-                p.configure(devices, mqtt_servers, plugin_config)
+                    if plugin_key not in plugins:
+                        logger.error(f"No such plugin: {plugin_key}. Skipping")
+                        continue
 
-                pipeline_packet = p.do_action(pipeline_packet)
+                    p = plugins[plugin_key]
+                    p.configure(devices, mqtt_servers, plugin_config)
 
-        logger.debug(f"Pipeline {pipeline} completed")
+                    pipeline_packet = p.do_action(pipeline_packet)
+
+            logger.debug(f"Pipeline {pipeline} completed")
 
 
 def onConnection(
@@ -86,22 +87,23 @@ with open("config.yaml") as f:
 devices = {}
 mqtt_servers = {}
 
-for device in bridge_config["devices"]:
-    if "active" in device and not device["active"]:
-        continue
+if "devices" in bridge_config:
+    for device in bridge_config["devices"]:
+        if "active" in device and not device["active"]:
+            continue
 
-    if "serial" in device:
-        devices[device["name"]] = meshtastic.serial_interface.SerialInterface(
-            devPath=device["serial"]
-        )
-    elif "tcp" in device:
-        logger.debug(f"Connecting to {device['tcp']} ...")
-        devices[device["name"]] = CustomTCPInterface(
-            hostname=device["tcp"], device_name=device["name"]
-        )
-        logger.debug(f"Connected to {device['tcp']}")
-    else:
-        devices[device["name"]] = meshtastic.serial_interface.SerialInterface()
+        if "serial" in device:
+            devices[device["name"]] = meshtastic.serial_interface.SerialInterface(
+                devPath=device["serial"]
+            )
+        elif "tcp" in device:
+            logger.debug(f"Connecting to {device['tcp']} ...")
+            devices[device["name"]] = CustomTCPInterface(
+                hostname=device["tcp"], device_name=device["name"]
+            )
+            logger.debug(f"Connected to {device['tcp']}")
+        else:
+            devices[device["name"]] = meshtastic.serial_interface.SerialInterface()
 
 if "mqtt_servers" in bridge_config:
     for config in bridge_config["mqtt_servers"]:

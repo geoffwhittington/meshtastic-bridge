@@ -1,0 +1,12 @@
+mqtt_servers:
+  - name: local
+    server: localhost
+    port: 1883
+    topic: msh/2/json/#
+    pipelines:
+      owntrack:
+      - owntracks_plugin:
+          server_name: local
+          tid_table:
+            "12345": ["Van", "GV"]
+            "-6789": ["Home", "HR"]

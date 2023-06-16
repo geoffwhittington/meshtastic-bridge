@@ -318,6 +318,89 @@ class MQTTPlugin(Plugin):
 plugins["mqtt_plugin"] = MQTTPlugin()
 
 
+class OwntracksPlugin(Plugin):
+    logger = logging.getLogger(name="meshtastic.bridge.plugin.Owntracks")
+
+    def do_action(self, packet):
+
+        required_options = ["tid_table", "server_name"]
+        for option in required_options:
+            if option not in self.config:
+                self.logger.warning(f"Missing config: {option}")
+                return packet
+        tid_table = self.config["tid_table"]
+
+        if not "from" in packet:
+            self.logger.warning("Missing from: field")
+            return packet
+
+        if not str(packet["from"]) in self.config["tid_table"]:
+            self.logger.warning(f"Sender not in tid_table: {packet}")
+            return packet
+
+        from_str = str(packet["from"])
+
+        message = json.loads('{"_type":"location", "bs":0}')
+        message["tid"] = tid_table[from_str][1]
+        self.logger.debug(f"processing packet {packet}")
+        #Packet direct from radio
+        if (
+            "decoded" in packet
+            and "position" in packet["decoded"]
+            and "latitude" in packet["decoded"]["position"]
+            and packet["decoded"]["position"]["latitude"] != 0
+        ):
+            message["lat"] = packet["decoded"]["position"]["latitude"]
+            message["lon"] = packet["decoded"]["position"]["longitude"]
+            message["tst"] = packet["decoded"]["position"]["time"]
+            message["created_at"] = packet["rxTime"]
+            if "altitude" in packet["decoded"]["position"]:
+                message["alt"] = packet["decoded"]["position"]["altitude"]
+
+        #packet from mqtt
+        elif (
+            "type" in packet
+            and packet["type"] == "position"
+            and "payload" in packet
+            and "latitude_i" in packet["payload"]
+            and packet["payload"]["latitude_i"] != 0
+        ):
+            message["lat"] = packet["payload"]["latitude_i"]/10000000
+            message["lon"] = packet["payload"]["longitude_i"]/10000000
+            message["tst"] = packet["timestamp"]
+            if ("time" in packet["payload"]):
+                message["created_at"] = packet["payload"]["time"]
+            else:
+                message["created_at"] = packet["timestamp"]
+            if "altitude" in packet["payload"]:
+                message["alt"] = packet["payload"]["altitude"]
+        else:
+            self.logger.debug("Not a location packet")
+            return packet
+
+        if self.config["server_name"] not in self.mqtt_servers:
+            self.logger.warning(f"No server established: {self.config['server_name']}")
+            return packet
+
+        mqtt_server = self.mqtt_servers[self.config["server_name"]]
+
+        if not mqtt_server.is_connected():
+            self.logger.error("Not sent, not connected")
+            return
+
+        self.logger.debug("Sending owntracks message")
+
+        info = mqtt_server.publish("owntracks/user/" + tid_table[from_str][0], json.dumps(message))
+        #info.wait_for_publish()
+
+        self.logger.debug("Message sent")
+
+        return packet
+
+
+plugins["owntracks_plugin"] = OwntracksPlugin()
+
+
 class EncryptFilter(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.filter.encrypt")
 
