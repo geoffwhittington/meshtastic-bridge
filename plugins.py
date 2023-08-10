@@ -15,10 +15,11 @@ class Plugin(object):
     def __init__(self) -> None:
         self.logger.setLevel(logging.INFO)
 
-    def configure(self, devices, mqtt_servers, config):
+    def configure(self, devices, mqtt_servers, config, nodes_by_num=None):
         self.config = config
         self.devices = devices
         self.mqtt_servers = mqtt_servers
+        self.nodes_by_num = nodes_by_num
 
         if config and "log_level" in config:
             if config["log_level"] == "debug":
@@ -85,6 +86,20 @@ class DebugFilter(Plugin):
 
 
 plugins["debugger"] = DebugFilter()
+
+
+class AddUserInfoFilter(Plugin):
+    logger = logging.getLogger(name="meshtastic.bridge.plugin.node_info")
+
+    def do_action(self, packet):
+        from_num = packet["from"]
+        if self.nodes_by_num and from_num in self.nodes_by_num:
+            packet["fromUser"] = self.nodes_by_num[from_num]["user"]
+
+        return packet
+
+
+plugins["add_user_info"] = AddUserInfoFilter()
 
 
 class MessageFilter(Plugin):
