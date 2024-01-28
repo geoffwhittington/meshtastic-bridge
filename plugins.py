@@ -93,7 +93,7 @@ class AddUserInfoFilter(Plugin):
 
     def do_action(self, packet):
         from_num = packet["from"]
-        if self.nodes_by_num and from_num in self.nodes_by_num:
+        if self.nodes_by_num and from_num in self.nodes_by_num and "user" in self.nodes_by_num[from_num]:
             packet["fromUser"] = self.nodes_by_num[from_num]["user"]
 
         return packet
@@ -415,6 +415,102 @@ class OwntracksPlugin(Plugin):
 
 plugins["owntracks_plugin"] = OwntracksPlugin()
 
+
+class AprsPlugin(Plugin):
+    logger = logging.getLogger(name="meshtastic.bridge.plugin.aprs")
+    aprs = None
+
+    # TODO: make sure that CBAPRS is possible
+
+    def configure(self, *args, **kwargs):
+        super().configure(*args, **kwargs)
+
+        try:
+            if not self.aprs:
+                import aprslib
+
+                self.logger.debug('Connecting to APRS...')
+                self.aprs = aprslib.IS(
+                    self.config["callsign"],
+                    passwd=str(self.config["aprs_is"]["password"]),
+                    host=self.config["aprs_is"]["server"],
+                    port=self.config["aprs_is"]["port"]
+                )
+
+                # FIXME: disconnect gracefully
+                self.aprs.connect()
+
+                self.start_igate_beacons_sender()
+        except Exception as ex:
+            self.logger.error(ex)
+
+    def do_action(self, packet):
+        if (
+            "decoded" in packet
+            and "position" in packet["decoded"]
+            and "latitude" in packet["decoded"]["position"]
+            and "longitude" in packet["decoded"]["position"]
+        ):
+            try:
+                aprs_meta = self.parse_aprs_metadata(packet)
+
+                self.logger.debug('New message to forward to APRS')
+
+                from aprslib.packets import PositionReport
+
+                node_beacon = PositionReport({
+                    "fromcall": aprs_meta["callsign"],
+                    "tocall": "APLMB0",
+                    "path": ["WIDE1-1", "qAR", self.config["callsign"]],
+                    "symbol_table": aprs_meta["symbol"][0],
+                    "symbol": aprs_meta["symbol"][1],
+                    "latitude": packet["decoded"]["position"]["latitude"],
+                    "longitude": packet["decoded"]["position"]["longitude"],
+                    "comment": aprs_meta["comment"],
+                })
+                self.aprs.sendall(node_beacon)
+            except ValueError as ex:
+                self.logger.debug(ex)
+
+        return packet
+
+    def start_igate_beacons_sender(self):
+        from aprslib.packets import PositionReport
+        import threading
+
+        self.logger.debug('Sending IGate beacon...')
+
+        igate_beacon = PositionReport({
+            "fromcall": self.config["callsign"],
+            "tocall": "APLMB0",
+            "symbol_table": "L",
+            "symbol": "&",
+            "latitude": self.config["beacon"]["latitude"],
+            "longitude": self.config["beacon"]["longitude"],
+            "comment": self.config["beacon"]["comment"],
+        })
+        self.aprs.sendall(igate_beacon)
+
+        threading.Timer(self.config["beacon"]["interval_min"] * 60, self.start_igate_beacons_sender).start()
+
+    def parse_aprs_metadata(self, packet):
+        if (
+            "decoded" in packet
+            and "fromUser" in packet
+            and "longName" in packet["fromUser"]
+        ):
+            # FIXME: make config easier by replacing regexp to some sort of replaceable patterns
+            meta_from_name_re = re.compile("(?P<callsign>[A-Z0-9-]+)" + self.config["config_from_device_name_re"])
+            match = meta_from_name_re.match(packet["fromUser"]["longName"])
+            if not match:
+                raise ValueError("Not APRS packet - no callsign specified")
+
+            return match.groupdict()
+
+        raise ValueError("No node name defined")
+
+
+plugins["aprs_plugin"] = AprsPlugin()
 
 class EncryptFilter(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.filter.encrypt")
