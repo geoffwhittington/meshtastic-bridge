@@ -19,7 +19,6 @@ class Plugin(object):
         self.config = config
         self.devices = devices
         self.mqtt_servers = mqtt_servers
-        self.nodes_by_num = interface.nodesByNum if interface else None
         self.interface = interface
 
         if config and "log_level" in config:
@@ -90,12 +89,15 @@ plugins["debugger"] = DebugFilter()
 
 
 class AddUserInfoFilter(Plugin):
-    logger = logging.getLogger(name="meshtastic.bridge.plugin.node_info")
+    logger = logging.getLogger(name="meshtastic.bridge.plugin.user_info")
 
     def do_action(self, packet):
-        from_num = packet["from"]
-        if self.nodes_by_num and from_num in self.nodes_by_num and "user" in self.nodes_by_num[from_num]:
-            packet["fromUser"] = self.nodes_by_num[from_num]["user"]
+        if self.interface:
+            try:
+                from_num = packet["from"]
+                packet["fromUser"] = self.interface.nodesByNum[from_num]["user"]
+            except KeyError as ex:
+                pass
 
         return packet
 
