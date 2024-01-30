@@ -15,11 +15,12 @@ class Plugin(object):
     def __init__(self) -> None:
         self.logger.setLevel(logging.INFO)
 
-    def configure(self, devices, mqtt_servers, config, nodes_by_num=None):
+    def configure(self, devices, mqtt_servers, config, interface):
         self.config = config
         self.devices = devices
         self.mqtt_servers = mqtt_servers
-        self.nodes_by_num = nodes_by_num
+        self.nodes_by_num = interface.nodesByNum if interface else None
+        self.interface = interface
 
         if config and "log_level" in config:
             if config["log_level"] == "debug":
@@ -439,18 +440,11 @@ class AprsPlugin(Plugin):
 
                 # FIXME: disconnect gracefully
                 self.aprs.connect()
-
-                self.start_igate_beacons_sender()
         except Exception as ex:
             self.logger.error(ex)
 
     def do_action(self, packet):
-        if (
-            "decoded" in packet
-            and "position" in packet["decoded"]
-            and "latitude" in packet["decoded"]["position"]
-            and "longitude" in packet["decoded"]["position"]
-        ):
+        if self.is_position_packet(packet):
             try:
                 aprs_meta = self.parse_aprs_metadata(packet)
 
@@ -472,11 +466,20 @@ class AprsPlugin(Plugin):
             except ValueError as ex:
                 self.logger.debug(ex)
 
+        if self.is_position_packet(packet) and packet["from"] == self.interface.getMyNodeInfo()["num"]:
+            self.report_self_position(packet)
+
         return packet
 
-    def start_igate_beacons_sender(self):
+    @staticmethod
+    def is_position_packet(packet):
+        try:
+            return packet["decoded"]["portnum"] == "POSITION_APP" and packet["decoded"]["position"]["latitude"] is not None and packet["decoded"]["position"]["longitude"] is not None
+        except KeyError as ex:
+            return False
+
+    def report_self_position(self, packet):
         from aprslib.packets import PositionReport
-        import threading
 
         self.logger.debug('Sending IGate beacon...')
 
@@ -485,13 +488,11 @@ class AprsPlugin(Plugin):
             "tocall": "APLMB0",
             "symbol_table": "L",
             "symbol": "&",
-            "latitude": self.config["beacon"]["latitude"],
-            "longitude": self.config["beacon"]["longitude"],
+            "latitude": packet["decoded"]["position"]["latitude"],
+            "longitude": packet["decoded"]["position"]["longitude"],
             "comment": self.config["beacon"]["comment"],
         })
         self.aprs.sendall(igate_beacon)
-
-        threading.Timer(self.config["beacon"]["interval_min"] * 60, self.start_igate_beacons_sender).start()
 
     def parse_aprs_metadata(self, packet):
         if (

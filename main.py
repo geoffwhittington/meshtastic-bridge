@@ -51,7 +51,7 @@ def onReceive(packet, interface):  # called when a packet arrives
                         continue
 
                     p = plugins[plugin_key]
-                    p.configure(devices, mqtt_servers, plugin_config, interface.nodesByNum)
+                    p.configure(devices, mqtt_servers, plugin_config, interface)
 
                     pipeline_packet = p.do_action(pipeline_packet)
 
