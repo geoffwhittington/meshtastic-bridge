@@ -446,25 +446,14 @@ class AprsPlugin(Plugin):
             self.logger.error(ex)
 
     def do_action(self, packet):
+        if not self.interface:
+            self.logger.error("Must be connected to a device directly")
+            return packet
+
         if self.is_position_packet(packet):
             try:
                 aprs_meta = self.parse_aprs_metadata(packet)
-
-                self.logger.debug('New message to forward to APRS')
-
-                from aprslib.packets import PositionReport
-
-                node_beacon = PositionReport({
-                    "fromcall": aprs_meta["callsign"],
-                    "tocall": "APLMB0",
-                    "path": ["WIDE1-1", "qAR", self.config["callsign"]],
-                    "symbol_table": aprs_meta["symbol"][0],
-                    "symbol": aprs_meta["symbol"][1],
-                    "latitude": packet["decoded"]["position"]["latitude"],
-                    "longitude": packet["decoded"]["position"]["longitude"],
-                    "comment": aprs_meta["comment"],
-                })
-                self.aprs.sendall(node_beacon)
+                self.report_position(aprs_meta, packet)
             except ValueError as ex:
                 self.logger.debug(ex)
 
@@ -476,14 +465,18 @@ class AprsPlugin(Plugin):
     @staticmethod
     def is_position_packet(packet):
         try:
-            return packet["decoded"]["portnum"] == "POSITION_APP" and packet["decoded"]["position"]["latitude"] is not None and packet["decoded"]["position"]["longitude"] is not None
+            return (
+                    packet["decoded"]["portnum"] == "POSITION_APP"
+                    and packet["decoded"]["position"]["latitude"] is not None
+                    and packet["decoded"]["position"]["longitude"] is not None
+            )
         except KeyError as ex:
             return False
 
     def report_self_position(self, packet):
         from aprslib.packets import PositionReport
 
-        self.logger.debug('Sending IGate beacon...')
+        self.logger.debug("Sending IGate beacon...")
 
         igate_beacon = PositionReport({
             "fromcall": self.config["callsign"],
@@ -496,21 +489,40 @@ class AprsPlugin(Plugin):
         })
         self.aprs.sendall(igate_beacon)
 
+    def report_position(self, aprs_meta, packet):
+        from aprslib.packets import PositionReport
+
+        self.logger.debug(f"Sending {aprs_meta['callsign']} beacon...")
+
+        node_beacon = PositionReport({
+            "fromcall": aprs_meta["callsign"],
+            "tocall": "APLMB0",
+            "path": ["WIDE1-1", "qAR", self.config["callsign"]],
+            "symbol_table": aprs_meta["symbol"][0],
+            "symbol": aprs_meta["symbol"][1],
+            "latitude": packet["decoded"]["position"]["latitude"],
+            "longitude": packet["decoded"]["position"]["longitude"],
+            "comment": aprs_meta["comment"],
+        })
+        self.aprs.sendall(node_beacon)
+
     def parse_aprs_metadata(self, packet):
+        from_num = packet["from"]
         if (
-            "decoded" in packet
-            and "fromUser" in packet
-            and "longName" in packet["fromUser"]
+            from_num not in self.interface.nodesByNum
+            or "user" not in self.interface.nodesByNum[from_num]
+            or "longName" not in self.interface.nodesByNum[from_num]["user"]
         ):
-            # FIXME: make config easier by replacing regexp to some sort of replaceable patterns
-            meta_from_name_re = re.compile("(?P<callsign>[A-Z0-9-]+)" + self.config["config_from_device_name_re"])
-            match = meta_from_name_re.match(packet["fromUser"]["longName"])
-            if not match:
-                raise ValueError("Not APRS packet - no callsign specified")
+            raise ValueError("Long name is not defined")
 
-            return match.groupdict()
+        long_name = self.interface.nodesByNum[from_num]["user"]["longName"]
+        # FIXME: make config easier by replacing regexp to some sort of replaceable patterns
+        meta_from_name_re = re.compile("(?P<callsign>[A-Z0-9-]+)" + self.config["config_from_device_name_re"])
+        match = meta_from_name_re.match(long_name)
+        if not match:
+            raise ValueError(f"APRS reporting is not enabled for {long_name}")
 
-        raise ValueError("No node name defined")
+        return match.groupdict()
 
 
 plugins["aprs_plugin"] = AprsPlugin()
