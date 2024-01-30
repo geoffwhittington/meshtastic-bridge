@@ -421,29 +421,35 @@ plugins["owntracks_plugin"] = OwntracksPlugin()
 
 class AprsPlugin(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.plugin.aprs")
+    aprs_servers = {}
     aprs = None
-
-    # TODO: make sure that CBAPRS is possible
 
     def configure(self, *args, **kwargs):
         super().configure(*args, **kwargs)
 
-        try:
-            if not self.aprs:
-                import aprslib
+        aprs_conn_uniq_key = ":".join([
+            self.config["aprs_is"]["server"],
+            str(self.config["aprs_is"]["port"]),
+            self.config["callsign"]
+        ])
 
-                self.logger.debug('Connecting to APRS...')
-                self.aprs = aprslib.IS(
-                    self.config["callsign"],
-                    passwd=str(self.config["aprs_is"]["password"]),
-                    host=self.config["aprs_is"]["server"],
-                    port=self.config["aprs_is"]["port"]
-                )
+        if aprs_conn_uniq_key in self.aprs_servers:
+            self.aprs = self.aprs_servers[aprs_conn_uniq_key]
+        else:
+            import aprslib
 
-                # FIXME: disconnect gracefully
-                self.aprs.connect()
-        except Exception as ex:
-            self.logger.error(ex)
+            self.logger.debug("Initializing APRS connection...")
+
+            self.aprs = aprslib.IS(
+                self.config["callsign"],
+                passwd=str(self.config["aprs_is"]["password"]),
+                host=self.config["aprs_is"]["server"],
+                port=self.config["aprs_is"]["port"]
+            )
+            self.aprs_servers[aprs_conn_uniq_key] = self.aprs
+
+        # FIXME: disconnect gracefully
+        self.aprs.connect(blocking=True)
 
     def do_action(self, packet):
         if not self.interface:
@@ -526,6 +532,7 @@ class AprsPlugin(Plugin):
 
 
 plugins["aprs_plugin"] = AprsPlugin()
+
 
 class EncryptFilter(Plugin):
     logger = logging.getLogger(name="meshtastic.bridge.filter.encrypt")
