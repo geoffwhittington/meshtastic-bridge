@@ -15,7 +15,7 @@ class Plugin(object):
     def __init__(self) -> None:
         self.logger.setLevel(logging.INFO)
 
-    def configure(self, devices, mqtt_servers, config, interface):
+    def configure(self, devices, mqtt_servers, config, interface=None):
         self.config = config
         self.devices = devices
         self.mqtt_servers = mqtt_servers
@@ -456,15 +456,16 @@ class AprsPlugin(Plugin):
             self.logger.error("Must be connected to a device directly")
             return packet
 
+        if self.is_position_packet(packet) and packet["from"] == self.interface.getMyNodeInfo()["num"]:
+            self.report_self_position(packet["decoded"]["position"])
+            return packet
+
         if self.is_position_packet(packet):
             try:
-                aprs_meta = self.parse_aprs_metadata(packet)
-                self.report_position(aprs_meta, packet)
+                aprs_data = self.parse_aprs_data(packet)
+                self.report_position(aprs_data, packet["decoded"]["position"])
             except ValueError as ex:
                 self.logger.debug(ex)
-
-        if self.is_position_packet(packet) and packet["from"] == self.interface.getMyNodeInfo()["num"]:
-            self.report_self_position(packet)
 
         return packet
 
@@ -479,40 +480,40 @@ class AprsPlugin(Plugin):
         except KeyError as ex:
             return False
 
-    def report_self_position(self, packet):
+    def report_self_position(self, position):
         from aprslib.packets import PositionReport
 
-        self.logger.debug("Sending IGate beacon...")
+        self.logger.info("Sending IGate beacon...")
 
         igate_beacon = PositionReport({
             "fromcall": self.config["callsign"],
             "tocall": "APLMB0",
             "symbol_table": "L",
             "symbol": "&",
-            "latitude": packet["decoded"]["position"]["latitude"],
-            "longitude": packet["decoded"]["position"]["longitude"],
-            "comment": self.config["beacon"]["comment"],
+            "latitude": position["latitude"],
+            "longitude": position["longitude"],
+            "comment": self.config["igate"]["comment"],
         })
         self.aprs.sendall(igate_beacon)
 
-    def report_position(self, aprs_meta, packet):
+    def report_position(self, aprs_data, position):
         from aprslib.packets import PositionReport
 
-        self.logger.debug(f"Sending {aprs_meta['callsign']} beacon...")
+        self.logger.info(f"Sending {aprs_data['callsign']} beacon...")
 
         node_beacon = PositionReport({
-            "fromcall": aprs_meta["callsign"],
+            "fromcall": aprs_data["callsign"],
             "tocall": "APLMB0",
             "path": ["WIDE1-1", "qAR", self.config["callsign"]],
-            "symbol_table": aprs_meta["symbol"][0],
-            "symbol": aprs_meta["symbol"][1],
-            "latitude": packet["decoded"]["position"]["latitude"],
-            "longitude": packet["decoded"]["position"]["longitude"],
-            "comment": aprs_meta["comment"],
+            "symbol_table": aprs_data["symbol"][0],
+            "symbol": aprs_data["symbol"][1],
+            "latitude": position["latitude"],
+            "longitude": position["longitude"],
+            "comment": aprs_data["comment"],
         })
         self.aprs.sendall(node_beacon)
 
-    def parse_aprs_metadata(self, packet):
+    def parse_aprs_data(self, packet):
         from_num = packet["from"]
         if (
             from_num not in self.interface.nodesByNum
@@ -522,13 +523,25 @@ class AprsPlugin(Plugin):
             raise ValueError("Long name is not defined")
 
         long_name = self.interface.nodesByNum[from_num]["user"]["longName"]
-        # FIXME: make config easier by replacing regexp to some sort of replaceable patterns
-        meta_from_name_re = re.compile("(?P<callsign>[A-Z0-9-]+)" + self.config["config_from_device_name_re"])
-        match = meta_from_name_re.match(long_name)
-        if not match:
-            raise ValueError(f"APRS reporting is not enabled for {long_name}")
 
-        return match.groupdict()
+        device_name_re = re.escape(self.config.get("device_name_format", "{CALLSIGN} +CBAPRS{SYMBOL}{COMMENT}"))
+        re_macroses = {
+            "\{CALLSIGN\}": "(?P<callsign>[A-Z0-9-]+)",
+            "\{SYMBOL\}": "(?P<symbol>[0-9A-J\\\/].)",  # http://www.aprs.org/symbols/symbols.txt
+            "\{COMMENT\}": "(?P<comment>.*)",
+        }
+        for macro, value in re_macroses.items():
+            device_name_re = device_name_re.replace(macro, value)
+
+        aprs_data_matches = re.compile("^" + device_name_re + "$").match(long_name)
+        if not aprs_data_matches:
+            raise ValueError(f"{long_name} does not match device name format for APRS")
+
+        aprs_data = aprs_data_matches.groupdict()
+        if "callsign" not in aprs_data or "symbol" not in aprs_data:
+            raise ValueError("{CALLSIGN} or {SYMBOL} are not defined in device_name_format")
+
+        return aprs_data
 
 
 plugins["aprs_plugin"] = AprsPlugin()
