@@ -1,4 +1,4 @@
-# Meshtastic Bridge
+# Habtastic Bridge - A Fork of Meshtastic Bridge intended to optimize owntracks output for high altitude balloon telemetry
 
 Connect [Meshtastic](https://meshtastic.org) radio networks using MQTT and HTTP.
 
@@ -25,24 +25,24 @@ Refer to <https://meshtastic.org/docs/settings/config/wifi#wifi-client> for deta
 Download the code and install it onto a system:
 
 ```
-$ git clone https://github.com/geoffwhittington/meshtastic-bridge.git
+$ git clone https://github.com/cbvicious/habtastic-bridge.git
 ```
 
 Create a Python virtual environment
 
 ```
-$ python3 -m venv meshtastic-bridge
+$ python3 -m venv habtastic-bridge
 ```
 
 Install the bridge dependencies
 
 ```
-$ cd meshtastic-bridge
+$ cd habtastic-bridge
 $ source bin/activate
 $ pip install -r requirements.txt
 ```
 
-## Docker installation
+## Docker installation - NOT CURRENTLY FUNCTIONAL
 
 There is nothing to install with Docker, the bridge is downloaded at the time it is run
 
@@ -61,7 +61,7 @@ mqtt_servers:
    - name: external
      server: broker.hivemq.com
      port: 1883
-     topic: meshtastic/radio-network1
+     topic: msh/
      pipelines:
        mqtt-to-radio:
          - decrypt_filter:
@@ -91,7 +91,7 @@ NOTE: If `tcp` or `serial` are not given the bridge will attempt to detect a rad
 - **name** Reference given to the MQTT server. For example, `my_mqtt_server`
 - **server** The IP address or hostname of a MQTT server. For example, `server.mqttserver.com`
 - **port** The port the MQTT server listens on
-- **topic** The topic name associated with the network traffic. For example, `mesh/network`
+- **topic** The topic name associated with the network traffic. For example, `msh/2`
 - **insecure** Use a secure connection but do not validate the server certificate
 - **pipelines** A set of plugins (filters/actions) that run when a new message emerges for _topic_. Each pipeline is given a name; such as `mqtt-to-radio` (as in the example above)
 
@@ -111,7 +111,6 @@ The following plugins can be used in the `pipelines` section of `config.yaml`:
 | `encrypt_filter`       | Encrypt a packet for a desired MQTT recipient                        |
 | `decrypt_filter`       | Decrypt a packet originating from MQTT                               |
 | `radio_message_plugin` | Send a packet to a specified `device`                                |
-| `nostr_plugin`         | Send a NoStr event to a relay                                        |
 | `owntracks_plugin`     | Send location data to MQTT server for Owntracks                      |
 
 ### debugger - Output the contents of a packet
@@ -329,7 +328,7 @@ Create a `config.yaml` with the desired settings and run the following Docker co
 #### Linux
 
 ```
-docker run --rm --network host -v $(pwd)/config.yaml:/code/config.yaml gwhittington/meshtastic-bridge:latest
+docker run --rm --network host -v $(pwd)/config.yaml:/code/config.yaml cbvicious/habtastic-bridge:latest
 ```
 
 ## Resources
