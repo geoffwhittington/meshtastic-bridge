@@ -7,6 +7,8 @@ import logging
 import os
 import re
 import ssl
+import math
+import pickle
 
 plugins = {}
 
@@ -535,3 +537,145 @@ class RadioMessagePlugin(Plugin):
 
 
 plugins["radio_message_plugin"] = RadioMessagePlugin()
+
+class AntennaPlugin(Plugin):
+    logger = logging.getLogger(name="meshtastic.bridge.plugin.Antenna")
+
+    def do_action(self, packet):
+
+        required_options = ["tid_base", "tid_balloon", "server_name"]
+        for option in required_options:
+            if option not in self.config:
+                self.logger.warning(f"Missing config: {option}")
+                return packet
+        tid_base = self.config["tid_base"]
+        tid_balloon = self.config["tid_balloon"]
+        balloon_lat = 0.000
+        balloon_lon = 0.000
+        balloon_alt = 0.000
+        base_lat = 0.000
+        base_lon = 0.000
+        base_alt = 0.000
+        distance = 0.000
+        bearing = 0.000
+        ant_elev = 0.000
+
+        if not "from" in packet:
+            self.logger.warning("Missing from: field")
+            return packet
+
+        if str(packet["from"]) in self.config["tid_balloon"]:
+            self.logger.debug(f"Sender balloon: {packet}")
+            message = json.loads('{"_type":"location", "bs":0}')
+            self.logger.debug(f"processing balloon packet {packet}")
+            #Packet direct from radio
+            if (
+                "decoded" in packet
+                and "position" in packet["decoded"]
+                and "latitude" in packet["decoded"]["position"]
+                and packet["decoded"]["position"]["latitude"] != 0
+            ):
+                balloon_lat = packet["decoded"]["position"]["latitude"]
+                balloon_lon = packet["decoded"]["position"]["longitude"]
+                balloon_alt = packet["decoded"]["position"]["altitude"]
+
+            #packet from mqtt
+            elif (
+                "type" in packet
+                and packet["type"] == "position"
+                and "payload" in packet
+                and "latitude_i" in packet["payload"]
+                and packet["payload"]["latitude_i"] != 0
+            ):
+                balloon_lat = packet["decoded"]["position"]["latitude"]
+                balloon_lon = packet["decoded"]["position"]["longitude"]
+                balloon_alt = packet["decoded"]["position"]["altitude"]
+        elif str(packet["from"]) in self.config["tid_base"]:
+            self.logger.debug(f"Sender base: {packet}")
+            message = json.loads('{"_type":"location", "bs":0}')
+            self.logger.debug(f"processing base packet {packet}")
+            #Packet direct from radio
+            if (
+                "decoded" in packet
+                and "position" in packet["decoded"]
+                and "latitude" in packet["decoded"]["position"]
+                and packet["decoded"]["position"]["latitude"] != 0
+            ):
+                base_lat = packet["decoded"]["position"]["latitude"]
+                base_lon = packet["decoded"]["position"]["longitude"]
+                base_alt = packet["decoded"]["position"]["altitude"]
+
+            #packet from mqtt
+            elif (
+                "type" in packet
+                and packet["type"] == "position"
+                and "payload" in packet
+                and "latitude_i" in packet["payload"]
+                and packet["payload"]["latitude_i"] != 0
+            ):
+                base_lat = packet["decoded"]["position"]["latitude"]
+                base_lon = packet["decoded"]["position"]["longitude"]
+                base_alt = packet["decoded"]["position"]["altitude"]
+            else:
+                self.logger.debug("Not a location packet")
+                return packet
+
+        if self.config["server_name"] not in self.mqtt_servers:
+            self.logger.warning(f"No server established: {self.config['server_name']}")
+            return packet
+
+        mqtt_server = self.mqtt_servers[self.config["server_name"]]
+
+        if not mqtt_server.is_connected():
+            self.logger.error("Not connected to MQTT")
+            return
+
+        self.logger.debug("Calculating antenna aim")
+        
+        """Calculate the distance in kilometers between two locations."""
+        R = 6371.000  # Earth's radius in kilometers
+        phi1 = math.radians(base_lat)
+        phi2 = math.radians(balloon_lat)
+        delta_phi = math.radians(balloon_lat - base_lat)
+        delta_lambda = math.radians(balloon_lon - base_lon)
+        a = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        distance = R * c
+        
+        """Calculate the bearing in degrees from one location to another."""
+        y = math.sin(delta_lambda) * math.cos(phi2)
+        x = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(delta_lambda)
+        bearing = math.degrees(math.atan2(y, x))
+        
+        """Calculate elevation angle: To calculate the Antenna Elevation Angle,
+            subtract base_alt from balloon_alt.
+            Subtract this result from distance.
+            Then, divide this result by the distance between the antenna and the satellite.
+            Finally, take the arctangent of this quotient to get the Antenna Elevation Angle."""
+        
+        phi3 = (balloon_alt * 1000) - (base_alt * 1000)
+        phi4 = distance - phi3
+        phi5 = phi4 / distance
+        ant_elev = math.atan(phi5)
+        
+        vectors = {
+            bearing,
+            ant_elev
+            }
+        
+        self.logger.debug("Antenna aim calculated, writing to vectors.pkl")
+        file_path = 'vectors.pkl'
+        
+        # Open the file in binary mode
+        with open(file_path, 'wb') as f:
+            # Serialize and write the variable to the file
+            pickle.dump(vectors, f)
+            f.close()
+            
+        self.logger.debug("Write completed, file closed")
+
+        return 
+
+
+plugins["Antenna_plugin"] = AntennaPlugin()
+
