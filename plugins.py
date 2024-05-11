@@ -550,20 +550,27 @@ class AntennaPlugin(Plugin):
                 return packet
         tid_base = self.config["tid_base"]
         tid_balloon = self.config["tid_balloon"]
-        balloon_lat = 0.000
-        balloon_lon = 0.000
-        balloon_alt = 0.000
-        base_lat = 0.000
-        base_lon = 0.000
-        base_alt = 0.000
-        distance = 0.000
-        bearing = 0.000
-        ant_elev = 0.000
+        file_path = 'vectors.pkl'
 
         if not "from" in packet:
             self.logger.warning("Missing from: field")
             return packet
+        
+        # deserialize data from last run
 
+        with open(file_path, "rb") as f:
+            deserialized_dict = pickle.load(f)
+        
+        balloon_lat = deserialized_dict["balloon_lat"]
+        balloon_lon = deserialized_dict["balloon_lon"]
+        balloon_alt = deserialized_dict["balloon_alt"]
+        base_lat = deserialized_dict["base_lat"]
+        base_lon = deserialized_dict["base_lon"]
+        base_alt = deserialized_dict["base_alt"]
+        distance = deserialized_dict["distance"]
+        bearing = deserialized_dict["bearing"]
+        ant_elev = deserialized_dict["ant_elev"]
+        
         if str(packet["from"]) in self.config["tid_balloon"]:
             self.logger.debug(f"Sender balloon: {packet}")
             message = json.loads('{"_type":"location", "bs":0}')
@@ -653,18 +660,23 @@ class AntennaPlugin(Plugin):
             Then, divide this result by the distance between the antenna and the satellite.
             Finally, take the arctangent of this quotient to get the Antenna Elevation Angle."""
         
-        phi3 = (balloon_alt * 1000) - (base_alt * 1000)
+        phi3 = (balloon_alt / 1000) - (base_alt / 1000)
         phi4 = distance - phi3
         phi5 = phi4 / distance
         ant_elev = math.atan(phi5)
         
         vectors = {
             bearing,
-            ant_elev
+            ant_elev,
+            base_lat,
+            base_lon,
+            base_alt,
+            balloon_lat,
+            balloon_lon,
+            balloon_alt
             }
         
         self.logger.debug("Antenna aim calculated, writing to vectors.pkl")
-        file_path = 'vectors.pkl'
         
         # Open the file in binary mode
         with open(file_path, 'wb') as f:
