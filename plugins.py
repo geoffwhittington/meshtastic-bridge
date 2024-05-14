@@ -555,22 +555,32 @@ class AntennaPlugin(Plugin):
         if not "from" in packet:
             self.logger.warning("Missing from: field")
             return packet
-        
+
+#        balloon_lat = 10.00
+#        balloon_lon = 10.00
+#        balloon_alt = 10.00
+#        base_lat = 10.00
+#        base_lon = 10.00
+#        base_alt = 10.00
+#        distance = 10.00
+#        bearing = 10.00
+#        ant_elev = 10.00
+
         # deserialize data from last run
 
-        with open(file_path, "rb") as f:
-            deserialized_dict = pickle.load(f)
-        
-        balloon_lat = deserialized_dict["balloon_lat"]
-        balloon_lon = deserialized_dict["balloon_lon"]
-        balloon_alt = deserialized_dict["balloon_alt"]
-        base_lat = deserialized_dict["base_lat"]
-        base_lon = deserialized_dict["base_lon"]
-        base_alt = deserialized_dict["base_alt"]
-        distance = deserialized_dict["distance"]
-        bearing = deserialized_dict["bearing"]
-        ant_elev = deserialized_dict["ant_elev"]
-        
+#        with open(file_path, "rb") as f:
+#            deserialized_dict = pickle.load(f)
+
+#        balloon_lat = deserialized_dict["balloon_lat"]
+#        balloon_lon = deserialized_dict["balloon_lon"]
+#        balloon_alt = deserialized_dict["balloon_alt"]
+#        base_lat = deserialized_dict["base_lat"]
+#        base_lon = deserialized_dict["base_lon"]
+#        base_alt = deserialized_dict["base_alt"]
+#        distance = deserialized_dict["distance"]
+#        bearing = deserialized_dict["bearing"]
+#        ant_elev = deserialized_dict["ant_elev"]
+
         if str(packet["from"]) in self.config["tid_balloon"]:
             self.logger.debug(f"Sender balloon: {packet}")
             message = json.loads('{"_type":"location", "bs":0}')
@@ -638,7 +648,7 @@ class AntennaPlugin(Plugin):
             return
 
         self.logger.debug("Calculating antenna aim")
-        
+
         """Calculate the distance in kilometers between two locations."""
         R = 6371.000  # Earth's radius in kilometers
         phi1 = math.radians(base_lat)
@@ -648,23 +658,23 @@ class AntennaPlugin(Plugin):
         a = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
         distance = R * c
-        
+
         """Calculate the bearing in degrees from one location to another."""
         y = math.sin(delta_lambda) * math.cos(phi2)
         x = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(delta_lambda)
         bearing = math.degrees(math.atan2(y, x))
-        
+
         """Calculate elevation angle: To calculate the Antenna Elevation Angle,
             subtract base_alt from balloon_alt.
             Subtract this result from distance.
             Then, divide this result by the distance between the antenna and the satellite.
             Finally, take the arctangent of this quotient to get the Antenna Elevation Angle."""
-        
+
         phi3 = (balloon_alt / 1000) - (base_alt / 1000)
         phi4 = distance - phi3
         phi5 = phi4 / distance
         ant_elev = math.atan(phi5)
-        
+
         vectors = {
             bearing,
             ant_elev,
@@ -675,19 +685,20 @@ class AntennaPlugin(Plugin):
             balloon_lon,
             balloon_alt
             }
-        
+
         self.logger.debug("Antenna aim calculated, writing to vectors.pkl")
-        
+
         # Open the file in binary mode
         with open(file_path, 'wb') as f:
             # Serialize and write the variable to the file
             pickle.dump(vectors, f)
             f.close()
-            
+
         self.logger.debug("Write completed, file closed")
 
-        return 
+        return
 
 
 plugins["Antenna_plugin"] = AntennaPlugin()
+
 
