@@ -556,30 +556,30 @@ class AntennaPlugin(Plugin):
             self.logger.warning("Missing from: field")
             return packet
 
-#        balloon_lat = 10.00
-#        balloon_lon = 10.00
-#        balloon_alt = 10.00
-#        base_lat = 10.00
-#        base_lon = 10.00
-#        base_alt = 10.00
-#        distance = 10.00
-#        bearing = 10.00
-#        ant_elev = 10.00
+        balloon_lat = 10.00
+        balloon_lon = 10.00
+        balloon_alt = 10.00
+        base_lat = 10.00
+        base_lon = 10.00
+        base_alt = 10.00
+        distance = 10.00
+        bearing = 10.00
+        ant_elev = 10.00
 
         # deserialize data from last run
 
-#        with open(file_path, "rb") as f:
-#            deserialized_dict = pickle.load(f)
+        with open(file_path, "rb") as f:
+            deserialized_dict = pickle.load(f)
 
-#        balloon_lat = deserialized_dict["balloon_lat"]
-#        balloon_lon = deserialized_dict["balloon_lon"]
-#        balloon_alt = deserialized_dict["balloon_alt"]
-#        base_lat = deserialized_dict["base_lat"]
-#        base_lon = deserialized_dict["base_lon"]
-#        base_alt = deserialized_dict["base_alt"]
-#        distance = deserialized_dict["distance"]
-#        bearing = deserialized_dict["bearing"]
-#        ant_elev = deserialized_dict["ant_elev"]
+        balloon_lat = deserialized_dict["Balloon"]["Latitude"]
+        balloon_lon = deserialized_dict["Balloon"]["Longitude"]
+        balloon_alt = deserialized_dict["Balloon"]["Altitude"]
+        base_lat = deserialized_dict["Base"]["Latitude"]
+        base_lon = deserialized_dict["Base"]["Longitude"]
+        base_alt = deserialized_dict["Base"]["Altitude"]
+#        distance = deserialized_dict[""]
+        bearing = deserialized_dict["Antenna"]["Bearing"]
+        ant_elev = deserialized_dict["Antenna"]["Elevation"]
 
         if str(packet["from"]) in self.config["tid_balloon"]:
             self.logger.debug(f"Sender balloon: {packet}")
@@ -594,7 +594,8 @@ class AntennaPlugin(Plugin):
             ):
                 balloon_lat = packet["decoded"]["position"]["latitude"]
                 balloon_lon = packet["decoded"]["position"]["longitude"]
-                balloon_alt = packet["decoded"]["position"]["altitude"]
+                if "altitude" in packet["decoded"]["position"]:
+                    balloon_alt = packet["decoded"]["position"]["altitude"]
 
             #packet from mqtt
             elif (
@@ -604,9 +605,10 @@ class AntennaPlugin(Plugin):
                 and "latitude_i" in packet["payload"]
                 and packet["payload"]["latitude_i"] != 0
             ):
-                balloon_lat = packet["decoded"]["position"]["latitude"]
-                balloon_lon = packet["decoded"]["position"]["longitude"]
-                balloon_alt = packet["decoded"]["position"]["altitude"]
+                balloon_lat = packet["payload"]["latitude_i"]/10000000
+                balloon_lon = packet["payload"]["longitude_i"]/10000000
+                if "altitude" in packet["payload"]:
+                    balloon_alt = packet["payload"]["altitude"]
         elif str(packet["from"]) in self.config["tid_base"]:
             self.logger.debug(f"Sender base: {packet}")
             message = json.loads('{"_type":"location", "bs":0}')
@@ -620,7 +622,8 @@ class AntennaPlugin(Plugin):
             ):
                 base_lat = packet["decoded"]["position"]["latitude"]
                 base_lon = packet["decoded"]["position"]["longitude"]
-                base_alt = packet["decoded"]["position"]["altitude"]
+                if "altitude" in packet["decoded"]["position"]:
+                    base_alt = packet["decoded"]["position"]["altitude"]
 
             #packet from mqtt
             elif (
@@ -630,9 +633,10 @@ class AntennaPlugin(Plugin):
                 and "latitude_i" in packet["payload"]
                 and packet["payload"]["latitude_i"] != 0
             ):
-                base_lat = packet["decoded"]["position"]["latitude"]
-                base_lon = packet["decoded"]["position"]["longitude"]
-                base_alt = packet["decoded"]["position"]["altitude"]
+                base_lat = packet["payload"]["latitude_i"]/10000000
+                base_lon = packet["payload"]["longitude_i"]/10000000
+                if "altitude" in packet["payload"]:
+                    base_alt = packet["payload"]["altitude"]
             else:
                 self.logger.debug("Not a location packet")
                 return packet
@@ -676,14 +680,16 @@ class AntennaPlugin(Plugin):
         ant_elev = math.atan(phi5)
 
         vectors = {
-            bearing,
-            ant_elev,
-            base_lat,
-            base_lon,
-            base_alt,
-            balloon_lat,
-            balloon_lon,
-            balloon_alt
+            'Antenna': {
+                'Bearing': bearing, 'Elevation': ant_elev
+                },
+
+            'Base': {
+                'Latitude': base_lat, 'Longitude': base_lon, 'Altitude': base_alt
+                },
+            'Balloon': {
+                'Latitude': balloon_lat, 'Longitude': balloon_lon, 'Altitude': balloon_alt
+                }
             }
 
         self.logger.debug("Antenna aim calculated, writing to vectors.pkl")
