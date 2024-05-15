@@ -543,25 +543,25 @@ class AntennaPlugin(Plugin):
 
     def do_action(self, packet):
 
-        required_options = ["tid_base", "tid_balloon", "server_name"]
+        required_options = ["tid_local", "tid_remote", "server_name"]
         for option in required_options:
             if option not in self.config:
                 self.logger.warning(f"Missing config: {option}")
                 return packet
-        tid_base = self.config["tid_base"]
-        tid_balloon = self.config["tid_balloon"]
+        tid_local = self.config["tid_local"]
+        tid_remote = self.config["tid_remote"]
         file_path = 'vectors.pkl'
 
         if not "from" in packet:
             self.logger.warning("Missing from: field")
             return packet
 
-        balloon_lat = 10.00
-        balloon_lon = 10.00
-        balloon_alt = 10.00
-        base_lat = 10.00
-        base_lon = 10.00
-        base_alt = 10.00
+        remote_lat = 10.00
+        remote_lon = 10.00
+        remote_alt = 10.00
+        local_lat = 10.00
+        local_lon = 10.00
+        local_alt = 10.00
         distance = 10.00
         bearing = 10.00
         ant_elev = 10.00
@@ -571,20 +571,20 @@ class AntennaPlugin(Plugin):
         with open(file_path, "rb") as f:
             deserialized_dict = pickle.load(f)
 
-        balloon_lat = deserialized_dict["Balloon"]["Latitude"]
-        balloon_lon = deserialized_dict["Balloon"]["Longitude"]
-        balloon_alt = deserialized_dict["Balloon"]["Altitude"]
-        base_lat = deserialized_dict["Base"]["Latitude"]
-        base_lon = deserialized_dict["Base"]["Longitude"]
-        base_alt = deserialized_dict["Base"]["Altitude"]
+        remote_lat = deserialized_dict["Remote"]["Latitude"]
+        remote_lon = deserialized_dict["Remote"]["Longitude"]
+        remote_alt = deserialized_dict["Remote"]["Altitude"]
+        local_lat = deserialized_dict["Local"]["Latitude"]
+        local_lon = deserialized_dict["Local"]["Longitude"]
+        local_alt = deserialized_dict["Local"]["Altitude"]
 #        distance = deserialized_dict[""]
         bearing = deserialized_dict["Antenna"]["Bearing"]
         ant_elev = deserialized_dict["Antenna"]["Elevation"]
 
-        if str(packet["from"]) in self.config["tid_balloon"]:
-            self.logger.debug(f"Sender balloon: {packet}")
+        if str(packet["from"]) in self.config["tid_remote"]:
+            self.logger.debug(f"Sender remote: {packet}")
             message = json.loads('{"_type":"location", "bs":0}')
-            self.logger.debug(f"processing balloon packet {packet}")
+            self.logger.debug(f"processing remote packet {packet}")
             #Packet direct from radio
             if (
                 "decoded" in packet
@@ -592,10 +592,10 @@ class AntennaPlugin(Plugin):
                 and "latitude" in packet["decoded"]["position"]
                 and packet["decoded"]["position"]["latitude"] != 0
             ):
-                balloon_lat = packet["decoded"]["position"]["latitude"]
-                balloon_lon = packet["decoded"]["position"]["longitude"]
+                remote_lat = packet["decoded"]["position"]["latitude"]
+                remote_lon = packet["decoded"]["position"]["longitude"]
                 if "altitude" in packet["decoded"]["position"]:
-                    balloon_alt = packet["decoded"]["position"]["altitude"]
+                    remote_alt = packet["decoded"]["position"]["altitude"]
 
             #packet from mqtt
             elif (
@@ -605,14 +605,14 @@ class AntennaPlugin(Plugin):
                 and "latitude_i" in packet["payload"]
                 and packet["payload"]["latitude_i"] != 0
             ):
-                balloon_lat = packet["payload"]["latitude_i"]/10000000
-                balloon_lon = packet["payload"]["longitude_i"]/10000000
+                remote_lat = packet["payload"]["latitude_i"]/10000000
+                remote_lon = packet["payload"]["longitude_i"]/10000000
                 if "altitude" in packet["payload"]:
-                    balloon_alt = packet["payload"]["altitude"]
-        elif str(packet["from"]) in self.config["tid_base"]:
-            self.logger.debug(f"Sender base: {packet}")
+                    remote_alt = packet["payload"]["altitude"]
+        elif str(packet["from"]) in self.config["tid_local"]:
+            self.logger.debug(f"Sender local: {packet}")
             message = json.loads('{"_type":"location", "bs":0}')
-            self.logger.debug(f"processing base packet {packet}")
+            self.logger.debug(f"processing local packet {packet}")
             #Packet direct from radio
             if (
                 "decoded" in packet
@@ -620,10 +620,10 @@ class AntennaPlugin(Plugin):
                 and "latitude" in packet["decoded"]["position"]
                 and packet["decoded"]["position"]["latitude"] != 0
             ):
-                base_lat = packet["decoded"]["position"]["latitude"]
-                base_lon = packet["decoded"]["position"]["longitude"]
+                local_lat = packet["decoded"]["position"]["latitude"]
+                local_lon = packet["decoded"]["position"]["longitude"]
                 if "altitude" in packet["decoded"]["position"]:
-                    base_alt = packet["decoded"]["position"]["altitude"]
+                    local_alt = packet["decoded"]["position"]["altitude"]
 
             #packet from mqtt
             elif (
@@ -633,10 +633,10 @@ class AntennaPlugin(Plugin):
                 and "latitude_i" in packet["payload"]
                 and packet["payload"]["latitude_i"] != 0
             ):
-                base_lat = packet["payload"]["latitude_i"]/10000000
-                base_lon = packet["payload"]["longitude_i"]/10000000
+                local_lat = packet["payload"]["latitude_i"]/10000000
+                local_lon = packet["payload"]["longitude_i"]/10000000
                 if "altitude" in packet["payload"]:
-                    base_alt = packet["payload"]["altitude"]
+                    local_alt = packet["payload"]["altitude"]
             else:
                 self.logger.debug("Not a location packet")
                 return packet
@@ -655,10 +655,10 @@ class AntennaPlugin(Plugin):
 
         """Calculate the distance in kilometers between two locations."""
         R = 6371.000  # Earth's radius in kilometers
-        phi1 = math.radians(base_lat)
-        phi2 = math.radians(balloon_lat)
-        delta_phi = math.radians(balloon_lat - base_lat)
-        delta_lambda = math.radians(balloon_lon - base_lon)
+        phi1 = math.radians(local_lat)
+        phi2 = math.radians(remote_lat)
+        delta_phi = math.radians(remote_lat - local_lat)
+        delta_lambda = math.radians(remote_lon - local_lon)
         a = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
         distance = R * c
@@ -669,12 +669,12 @@ class AntennaPlugin(Plugin):
         bearing = math.degrees(math.atan2(y, x))
 
         """Calculate elevation angle: To calculate the Antenna Elevation Angle,
-            subtract base_alt from balloon_alt.
+            subtract local_alt from remote_alt.
             Subtract this result from distance.
             Then, divide this result by the distance between the antenna and the satellite.
             Finally, take the arctangent of this quotient to get the Antenna Elevation Angle."""
 
-        phi3 = (balloon_alt / 1000) - (base_alt / 1000)
+        phi3 = (remote_alt / 1000) - (local_alt / 1000)
         phi4 = distance - phi3
         phi5 = phi4 / distance
         ant_elev = math.atan(phi5)
@@ -684,11 +684,11 @@ class AntennaPlugin(Plugin):
                 'Bearing': bearing, 'Elevation': ant_elev
                 },
 
-            'Base': {
-                'Latitude': base_lat, 'Longitude': base_lon, 'Altitude': base_alt
+            'Local': {
+                'Latitude': local_lat, 'Longitude': local_lon, 'Altitude': local_alt
                 },
-            'Balloon': {
-                'Latitude': balloon_lat, 'Longitude': balloon_lon, 'Altitude': balloon_alt
+            'Remote': {
+                'Latitude': remote_lat, 'Longitude': remote_lon, 'Altitude': remote_alt
                 }
             }
 
