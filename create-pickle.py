@@ -1,11 +1,11 @@
 import pickle
 
-balloon_lat = 180.00
-balloon_lon = 90.00
-balloon_alt = 1205.00
-base_lat = 181.00
-base_lon = 91.00
-base_alt = 1215.00
+remote_lat = 180.00
+remote_lon = 90.00
+remote_alt = 1205.00
+local_lat = 181.00
+local_lon = 91.00
+local_alt = 1215.00
 distance = 100.00
 bearing = 14.00
 ant_elev = 19.00
@@ -16,11 +16,11 @@ vectors = {
         'Bearing': bearing, 'Elevation': ant_elev
         },
 
-    'Base': {
-        'Latitude': base_lat, 'Longitude': base_lon, 'Altitude': base_alt
+    'Local': {
+        'Latitude': local_lat, 'Longitude': local_lon, 'Altitude': local_alt
         },
-    'Balloon': {
-        'Latitude': balloon_lat, 'Longitude': balloon_lon, 'Altitude': balloon_alt
+    'Remote': {
+        'Latitude': remote_lat, 'Longitude': remote_lon, 'Altitude': remote_alt
         }
     }
 
