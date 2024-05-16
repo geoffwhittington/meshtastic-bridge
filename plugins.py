@@ -674,7 +674,7 @@ class AntennaPlugin(Plugin):
             Then, divide this result by the distance between the antenna and the satellite.
             Finally, take the arctangent of this quotient to get the Antenna Elevation Angle."""
 
-        elevation_rad = math.atan2(remote_alt - local_alt, distance)
+        elevation_rad = math.atan2((remote_alt / 1000) - (local_alt / 1000), distance)
         ant_elev = math.degrees(elevation_rad)
         
         vectors = {
