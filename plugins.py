@@ -676,7 +676,10 @@ class AntennaPlugin(Plugin):
         phi3 = (remote_alt / 1000) - (local_alt / 1000)
         phi4 = distance - phi3
 #        phi5 = phi4 / distance
-        ant_elev = math.degrees(math.atan2(phi4, distance))
+        ant_calc = math.atan2(phi4, distance)
+        if (ant_calc < 0):
+            ant_calc += Math.PI * 2
+        ant_elev = math.degrees(ant_calc)
 
         vectors = {
             'Antenna': {
