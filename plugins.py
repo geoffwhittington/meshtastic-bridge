@@ -666,6 +666,7 @@ class AntennaPlugin(Plugin):
         y = math.sin(delta_lambda) * math.cos(phi2)
         x = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(delta_lambda)
         bearing = math.degrees(math.atan2(y, x))
+        bearing = (bearing + 360) % 360
 
         """Calculate elevation angle: To calculate the Antenna Elevation Angle,
             subtract local_alt from remote_alt.
@@ -673,14 +674,9 @@ class AntennaPlugin(Plugin):
             Then, divide this result by the distance between the antenna and the satellite.
             Finally, take the arctangent of this quotient to get the Antenna Elevation Angle."""
 
-        phi3 = (remote_alt / 1000) - (local_alt / 1000)
-        phi4 = distance - phi3
-#        phi5 = phi4 / distance
-        ant_calc = math.atan2(phi4, distance)
-        if (ant_calc < 0):
-            ant_calc += Math.PI * 2
-        ant_elev = math.degrees(ant_calc)
-
+        elevation_rad = math.atan2(remote_alt - local_alt, distance)
+        ant_elev = math.degrees(elevation_rad)
+        
         vectors = {
             'Antenna': {
                 'Bearing': bearing, 'Distance': distance, 'Elevation': ant_elev
@@ -690,9 +686,6 @@ class AntennaPlugin(Plugin):
                 },
             'Remote': {
                 'Latitude': remote_lat, 'Longitude': remote_lon, 'Altitude': remote_alt
-                },
-            'Math': {
-                'phi3': phi3, 'phi4': phi4
                 }
             }
 
@@ -710,5 +703,3 @@ class AntennaPlugin(Plugin):
 
 
 plugins["Antenna_plugin"] = AntennaPlugin()
-
-
