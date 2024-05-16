@@ -25,21 +25,21 @@ Refer to <https://meshtastic.org/docs/settings/config/wifi#wifi-client> for deta
 Download the code and install it onto a system:
 
 ```
-$ git clone https://github.com/cbvicious/habtastic-bridge.git
+git clone https://github.com/cbvicious/habtastic-bridge.git
 ```
 
 Create a Python virtual environment
 
 ```
-$ python3 -m venv habtastic-bridge
+python3 -m venv habtastic-bridge
 ```
 
 Install the bridge dependencies
 
 ```
-$ cd habtastic-bridge
-$ source bin/activate
-$ pip install -r requirements.txt
+cd habtastic-bridge
+source bin/activate
+pip install -r requirements.txt
 ```
 
 ## Docker installation - NOT CURRENTLY FUNCTIONAL
