@@ -682,13 +682,12 @@ class AntennaPlugin(Plugin):
             'Antenna': {
                 'Bearing': bearing, 'Distance': distance, 'Elevation': ant_elev
                 },
-
             'Local': {
                 'Latitude': local_lat, 'Longitude': local_lon, 'Altitude': local_alt
                 },
             'Remote': {
                 'Latitude': remote_lat, 'Longitude': remote_lon, 'Altitude': remote_alt
-                }
+                },
             'Math': {
                 'phi3': phi3, 'phi4': phi4
                 }
