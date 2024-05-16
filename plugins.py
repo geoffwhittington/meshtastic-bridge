@@ -8,7 +8,6 @@ import os
 import re
 import ssl
 import math
-import pickle
 
 plugins = {}
 
@@ -550,7 +549,7 @@ class AntennaPlugin(Plugin):
                 return packet
         tid_local = self.config["tid_local"]
         tid_remote = self.config["tid_remote"]
-        file_path = 'vectors.pkl'
+        file_path = 'vectors.json'
 
         if not "from" in packet:
             self.logger.warning("Missing from: field")
@@ -568,8 +567,8 @@ class AntennaPlugin(Plugin):
 
         # deserialize data from last run
 
-        with open(file_path, "rb") as f:
-            deserialized_dict = pickle.load(f)
+        with open(file_path, "r") as f:
+            deserialized_dict = json.load(f)
 
         remote_lat = deserialized_dict["Remote"]["Latitude"]
         remote_lon = deserialized_dict["Remote"]["Longitude"]
@@ -692,12 +691,12 @@ class AntennaPlugin(Plugin):
                 }
             }
 
-        self.logger.debug("Antenna aim calculated, writing to vectors.pkl")
+        self.logger.debug("Antenna aim calculated, writing to vectors.json")
 
         # Open the file in binary mode
-        with open(file_path, 'wb') as f:
+        with open(file_path, 'w') as f:
             # Serialize and write the variable to the file
-            pickle.dump(vectors, f)
+            json.dump(vectors, f)
             f.close()
 
         self.logger.debug("Write completed, file closed")
