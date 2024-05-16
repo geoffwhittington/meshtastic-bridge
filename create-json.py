@@ -9,7 +9,7 @@ local_alt = 1215.00
 distance = 100.00
 bearing = 14.00
 ant_elev = 19.00
-file_path = 'vectors.pkl'
+file_path = 'vectors.json'
 
 vectors = {
     'Antenna': {
