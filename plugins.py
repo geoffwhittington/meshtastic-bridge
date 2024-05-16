@@ -675,12 +675,12 @@ class AntennaPlugin(Plugin):
 
         phi3 = (remote_alt / 1000) - (local_alt / 1000)
         phi4 = distance - phi3
-        phi5 = phi4 / distance
-        ant_elev = math.atan(phi5)
+#        phi5 = phi4 / distance
+        ant_elev = math.degrees(math.atan2(phi4, distance))
 
         vectors = {
             'Antenna': {
-                'Bearing': bearing, 'Elevation': ant_elev
+                'Bearing': bearing, 'Distance': distance, 'Elevation': ant_elev
                 },
 
             'Local': {
@@ -688,6 +688,9 @@ class AntennaPlugin(Plugin):
                 },
             'Remote': {
                 'Latitude': remote_lat, 'Longitude': remote_lon, 'Altitude': remote_alt
+                }
+            'Math': {
+                'phi3': phi3, 'phi4': phi4
                 }
             }
 
