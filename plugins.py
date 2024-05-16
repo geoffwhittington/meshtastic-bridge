@@ -692,7 +692,7 @@ class AntennaPlugin(Plugin):
         self.logger.debug("Antenna aim calculated, writing to vectors.json")
 
         # Open the file in binary mode
-        with open(file_path, 'a') as f:
+        with open(file_path, 'w') as f:
             # Serialize and write the variable to the file
             json.dump(vectors, f)
             f.close()
