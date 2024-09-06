@@ -5,3 +5,4 @@ pyyaml
 paho-mqtt
 jwcrypto
 nostr
+aprslib

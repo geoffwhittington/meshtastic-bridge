@@ -16,10 +16,11 @@ class Plugin(object):
     def __init__(self) -> None:
         self.logger.setLevel(logging.INFO)
 
-    def configure(self, devices, mqtt_servers, config):
+    def configure(self, devices, mqtt_servers, config, interface=None):
         self.config = config
         self.devices = devices
         self.mqtt_servers = mqtt_servers
+        self.interface = interface
 
         if config and "log_level" in config:
             if config["log_level"] == "debug":
@@ -86,6 +87,23 @@ class DebugFilter(Plugin):
 
 
 plugins["debugger"] = DebugFilter()
+
+
+class AddUserInfoFilter(Plugin):
+    logger = logging.getLogger(name="meshtastic.bridge.plugin.user_info")
+
+    def do_action(self, packet):
+        if self.interface:
+            try:
+                from_num = packet["from"]
+                packet["fromUser"] = self.interface.nodesByNum[from_num]["user"]
+            except KeyError as ex:
+                pass
+
+        return packet
+
+
+plugins["add_user_info"] = AddUserInfoFilter()
 
 
 class MessageFilter(Plugin):
@@ -400,6 +418,134 @@ class OwntracksPlugin(Plugin):
 
 
 plugins["owntracks_plugin"] = OwntracksPlugin()
+
+
+class AprsPlugin(Plugin):
+    logger = logging.getLogger(name="meshtastic.bridge.plugin.aprs")
+    aprs_servers = {}
+    aprs = None
+
+    def configure(self, *args, **kwargs):
+        super().configure(*args, **kwargs)
+
+        aprs_conn_uniq_key = ":".join([
+            self.config["aprs_is"]["server"],
+            str(self.config["aprs_is"]["port"]),
+            self.config["callsign"]
+        ])
+
+        if aprs_conn_uniq_key in self.aprs_servers:
+            self.aprs = self.aprs_servers[aprs_conn_uniq_key]
+        else:
+            import aprslib
+
+            self.logger.debug("Initializing APRS connection...")
+
+            self.aprs = aprslib.IS(
+                self.config["callsign"],
+                passwd=str(self.config["aprs_is"]["password"]),
+                host=self.config["aprs_is"]["server"],
+                port=self.config["aprs_is"]["port"]
+            )
+            self.aprs_servers[aprs_conn_uniq_key] = self.aprs
+
+        # FIXME: disconnect gracefully
+        self.aprs.connect(blocking=True)
+
+    def do_action(self, packet):
+        if not self.interface:
+            self.logger.error("Must be connected to a device directly")
+            return packet
+
+        if self.is_position_packet(packet) and packet["from"] == self.interface.getMyNodeInfo()["num"]:
+            self.report_self_position(packet["decoded"]["position"])
+            return packet
+
+        if self.is_position_packet(packet):
+            try:
+                aprs_data = self.parse_aprs_data(packet)
+                self.report_position(aprs_data, packet["decoded"]["position"])
+            except ValueError as ex:
+                self.logger.debug(ex)
+
+        return packet
+
+    @staticmethod
+    def is_position_packet(packet):
+        try:
+            return (
+                    packet["decoded"]["portnum"] == "POSITION_APP"
+                    and packet["decoded"]["position"]["latitude"] is not None
+                    and packet["decoded"]["position"]["longitude"] is not None
+            )
+        except KeyError as ex:
+            return False
+
+    def report_self_position(self, position):
+        from aprslib.packets import PositionReport
+
+        self.logger.info("Sending IGate beacon...")
+
+        igate_beacon = PositionReport({
+            "fromcall": self.config["callsign"],
+            "tocall": "APLMB0",
+            "symbol_table": "L",
+            "symbol": "&",
+            "latitude": position["latitude"],
+            "longitude": position["longitude"],
+            "comment": self.config["igate"]["comment"],
+        })
+        self.aprs.sendall(igate_beacon)
+
+    def report_position(self, aprs_data, position):
+        from aprslib.packets import PositionReport
+
+        self.logger.info(f"Sending {aprs_data['callsign']} beacon...")
+
+        node_beacon = PositionReport({
+            "fromcall": aprs_data["callsign"],
+            "tocall": "APLMB0",
+            "path": ["WIDE1-1", "qAR", self.config["callsign"]],
+            "symbol_table": aprs_data["symbol"][0],
+            "symbol": aprs_data["symbol"][1],
+            "latitude": position["latitude"],
+            "longitude": position["longitude"],
+            "comment": aprs_data["comment"],
+        })
+        self.aprs.sendall(node_beacon)
+
+    def parse_aprs_data(self, packet):
+        from_num = packet["from"]
+        if (
+            from_num not in self.interface.nodesByNum
+            or "user" not in self.interface.nodesByNum[from_num]
+            or "longName" not in self.interface.nodesByNum[from_num]["user"]
+        ):
+            raise ValueError("Long name is not defined")
+
+        long_name = self.interface.nodesByNum[from_num]["user"]["longName"]
+
+        device_name_re = re.escape(self.config.get("device_name_format", "{CALLSIGN} +CBAPRS{SYMBOL}{COMMENT}"))
+        re_macroses = {
+            "\{CALLSIGN\}": "(?P<callsign>[A-Z0-9-]+)",
+            "\{SYMBOL\}": "(?P<symbol>[0-9A-J\\\/].)",  # http://www.aprs.org/symbols/symbols.txt
+            "\{COMMENT\}": "(?P<comment>.*)",
+        }
+        for macro, value in re_macroses.items():
+            device_name_re = device_name_re.replace(macro, value)
+
+        aprs_data_matches = re.compile("^" + device_name_re + "$").match(long_name)
+        if not aprs_data_matches:
+            raise ValueError(f"{long_name} does not match device name format for APRS")
+
+        aprs_data = aprs_data_matches.groupdict()
+        if "callsign" not in aprs_data or "symbol" not in aprs_data:
+            raise ValueError("{CALLSIGN} or {SYMBOL} are not defined in device_name_format")
+
+        return aprs_data
+
+
+plugins["aprs_plugin"] = AprsPlugin()
 
 
 class EncryptFilter(Plugin):
