@@ -328,13 +328,22 @@ class OwntracksPlugin(Plugin):
             if option not in self.config:
                 self.logger.warning(f"Missing config: {option}")
                 return packet
-        tid_table = self.config["tid_table"]
+        #tid_table = self.config["tid_table"]
+        tid_table = {}
+        for tid_entry in self.config["tid_table"]: # We want to check for a key with an ! and convert to string
+          if "!" in tid_entry:
+              tid_table[str(int(tid_entry[1:], 16))] = self.config["tid_table"][tid_entry]
+          else:
+              tid_table[tid_entry] = self.config["tid_table"][tid_entry]
 
         if not "from" in packet:
             self.logger.warning("Missing from: field")
             return packet
 
-        if not str(packet["from"]) in self.config["tid_table"]:
+        if packet["from"] < 0:
+            packet["from"] = packet["from"] +(1 << 32)
+
+        if not str(packet["from"]) in tid_table:
             self.logger.warning(f"Sender not in tid_table: {packet}")
             return packet
 
