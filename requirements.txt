@@ -2,6 +2,6 @@ haversine
 meshtastic
 requests
 pyyaml
-paho-mqtt
+paho-mqtt >= 2.0.0
 jwcrypto
 nostr

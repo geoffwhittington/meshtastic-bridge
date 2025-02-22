@@ -121,18 +121,20 @@ if "mqtt_servers" in bridge_config:
         username = config["username"] if "username" in config else None
         password = config["password"] if "password" in config else None
 
-        logger.info(f"Connected to MQTT {config['name']}")
-
+        callback_version = mqtt.CallbackAPIVersion.VERSION2
         if client_id:
-            mqttc = mqtt.Client(client_id)
+            mqttc = mqtt.Client(callback_version, client_id)
         else:
-            mqttc = mqtt.Client()
+            mqttc = mqtt.Client(callback_version)
 
         if username and password:
             mqttc.username_pw_set(username, password)
 
-        def on_connect(mqttc, obj, flags, rc):
-            logger.debug(f"Connected to MQTT {config['name']}")
+        def on_connect(mqtt, obj, flags, rc, props):
+            if rc.is_failure:
+                logger.error(f"Could not connect to MQTT {config['name']} [{rc}]")
+            else:
+                logger.info(f"Connected to MQTT {config['name']}")
 
         def on_message(mqttc, obj, msg):
             orig_packet = msg.payload.decode()
@@ -171,11 +173,18 @@ if "mqtt_servers" in bridge_config:
                             logger.error(f"Hit an error: {e}", exc_info=True)
                 logger.debug(f"MQTT {config['name']} pipeline {pipeline} finished")
 
-        def on_publish(mqttc, obj, mid):
-            logger.debug(f"MQTT {config['name']}: on_publish: {mid}")
+        def on_publish(mqttc, obj, mid, rc, props):
+            if rc.is_failure:
+                logger.error(f"MQTT {config['name']}: Could not publish message ID: {mid} [{rc}]")
+            else:
+                logger.debug(f"MQTT {config['name']}: Published message ID: {mid}")
 
-        def on_subscribe(mqttc, obj, mid, granted_qos):
-            logger.debug(f"MQTT {config['name']}: on_subscribe: {mid}")
+        def on_subscribe(mqttc, obj, mid, rc_list, props):
+            for rc in rc_list:
+                if rc.is_failure:
+                    logger.error(f"MQTT {config['name']}: Subscription failed [{rc}]")
+                else:
+                    logger.debug(f"MQTT {config['name']}: Subscribed to topic [{rc}]")
 
         mqttc.on_message = on_message
         mqttc.on_connect = on_connect
